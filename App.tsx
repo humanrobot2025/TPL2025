@@ -34,12 +34,42 @@ const App: React.FC = () => {
   const pointsTable = useMemo(() => {
     const table: Record<string, PointsTableRow> = {};
     TEAMS.forEach(team => {
-      table[team.name] = { teamName: team.name, played: 0, won: 0, points: 0 };
+      table[team.name] = {
+        teamName: team.name,
+        played: 0,
+        won: 0,
+        points: 0,
+        runsFor: 0,
+        ballsFaced: 0,
+        runsAgainst: 0,
+        ballsBowled: 0
+      };
     });
 
+    const oversToBalls = (overs: string | undefined) => {
+      if (!overs) return 0;
+      // Overs format like '4.2' meaning 4 overs and 2 balls
+      const parts = overs.split('.');
+      const whole = parseInt(parts[0] || '0', 10) || 0;
+      const frac = parts[1] ? parseInt(parts[1], 10) || 0 : 0;
+      return whole * 6 + frac;
+    };
+
     matchHistory.forEach(match => {
-      if (table[match.teamA]) table[match.teamA].played += 1;
-      if (table[match.teamB]) table[match.teamB].played += 1;
+      if (table[match.teamA]) {
+        table[match.teamA].played += 1;
+        table[match.teamA].runsFor = (table[match.teamA].runsFor || 0) + (match.scoreA || 0);
+        table[match.teamA].ballsFaced = (table[match.teamA].ballsFaced || 0) + oversToBalls(match.oversA);
+        table[match.teamA].runsAgainst = (table[match.teamA].runsAgainst || 0) + (match.scoreB || 0);
+        table[match.teamA].ballsBowled = (table[match.teamA].ballsBowled || 0) + oversToBalls(match.oversB);
+      }
+      if (table[match.teamB]) {
+        table[match.teamB].played += 1;
+        table[match.teamB].runsFor = (table[match.teamB].runsFor || 0) + (match.scoreB || 0);
+        table[match.teamB].ballsFaced = (table[match.teamB].ballsFaced || 0) + oversToBalls(match.oversB);
+        table[match.teamB].runsAgainst = (table[match.teamB].runsAgainst || 0) + (match.scoreA || 0);
+        table[match.teamB].ballsBowled = (table[match.teamB].ballsBowled || 0) + oversToBalls(match.oversA);
+      }
       
       if (match.winner !== 'Draw' && table[match.winner]) {
         table[match.winner].won += 1;
@@ -50,7 +80,28 @@ const App: React.FC = () => {
       }
     });
 
-    return Object.values(table).sort((a, b) => b.points - a.points || b.won - a.won);
+    // Convert to array and sort by points, then wins, then NRR
+    const rows = Object.values(table).map(r => {
+      // compute NRR value for sorting
+      const oversFaced = (r.ballsFaced || 0) / 6 || 0;
+      const oversBowled = (r.ballsBowled || 0) / 6 || 0;
+      const runRateFor = oversFaced > 0 ? (r.runsFor || 0) / oversFaced : 0;
+      const runRateAgainst = oversBowled > 0 ? (r.runsAgainst || 0) / oversBowled : 0;
+      const nrr = runRateFor - runRateAgainst;
+      return { ...r, nrr } as PointsTableRow & { nrr: number };
+    });
+
+    rows.sort((a: any, b: any) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.won !== a.won) return b.won - a.won;
+      // tie-breaker: run-difference (runsFor - runsAgainst)
+      const tieA = (a.runsFor || 0) - (a.runsAgainst || 0);
+      const tieB = (b.runsFor || 0) - (b.runsAgainst || 0);
+      if (tieB !== tieA) return tieB - tieA;
+      return (b.nrr || 0) - (a.nrr || 0);
+    });
+
+    return rows as PointsTableRow[];
   }, [matchHistory]);
 
   const resetHistory = () => {

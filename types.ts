@@ -71,4 +71,8 @@ export interface PointsTableRow {
   played: number;
   won: number;
   points: number;
+  runsFor?: number;
+  ballsFaced?: number; // total balls faced (to compute overs)
+  runsAgainst?: number;
+  ballsBowled?: number; // total balls bowled
 }

@@ -25,6 +25,7 @@ const PointsTable: React.FC<PointsTableProps> = ({ rows }) => {
               <th className="px-6 py-4">Team</th>
               <th className="px-4 py-4 text-center">Played</th>
               <th className="px-4 py-4 text-center">Wins</th>
+              <th className="px-4 py-4 text-center">NRR</th>
               <th className="px-6 py-4 text-center text-yellow-400">Points</th>
             </tr>
           </thead>
@@ -46,12 +47,28 @@ const PointsTable: React.FC<PointsTableProps> = ({ rows }) => {
                 </td>
                 <td className="px-4 py-4 text-center font-bebas text-xl text-gray-400">{row.played}</td>
                 <td className="px-4 py-4 text-center font-bebas text-xl text-gray-400">{row.won}</td>
+                <td className="px-4 py-4 text-center font-bebas text-xl text-gray-400">
+                  {(() => {
+                    // compute NRR display from available fields (runsFor/ballsFaced, runsAgainst/ballsBowled)
+                    const runsFor = (row as any).runsFor || 0;
+                    const ballsFaced = (row as any).ballsFaced || 0;
+                    const runsAgainst = (row as any).runsAgainst || 0;
+                    const ballsBowled = (row as any).ballsBowled || 0;
+                    const oversFaced = ballsFaced / 6;
+                    const oversBowled = ballsBowled / 6;
+                    const runRateFor = oversFaced > 0 ? runsFor / oversFaced : 0;
+                    const runRateAgainst = oversBowled > 0 ? runsAgainst / oversBowled : 0;
+                    const nrr = runRateFor - runRateAgainst;
+                    const sign = nrr > 0 ? '+' : nrr < 0 ? '-' : '';
+                    return `${sign}${Math.abs(nrr).toFixed(2)}`;
+                  })()}
+                </td>
                 <td className="px-6 py-4 text-center font-bebas text-2xl text-yellow-400">{row.points}</td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-12 text-center">
+                <td colSpan={5} className="px-6 py-12 text-center">
                   <div className="flex flex-col items-center gap-2 opacity-20">
                     <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
