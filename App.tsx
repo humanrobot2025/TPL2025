@@ -11,6 +11,8 @@ import PointsTable from './components/PointsTable';
 import AdminPage from './components/AdminPage';
 import LiveView from './components/LiveView';
 import AdminUnlockForm from './components/AdminUnlockForm';
+import PlayerPage from './components/PlayerPage';
+import MatchDetail from './components/MatchDetail';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'scorer' | 'teams' | 'rules'>('scorer');
@@ -117,20 +119,25 @@ const App: React.FC = () => {
     }
   };
 
-  // Simple hash routing: '', '#/admin', '#/live'
-  const [route, setRoute] = useState<'root' | 'admin' | 'live'>(() => {
+  // Simple hash routing: '', '#/admin', '#/live', '#/player/:name', '#/match/:id'
+  const [route, setRoute] = useState<'root' | 'admin' | 'live' | 'player' | 'match'>(() => {
     const h = window.location.hash || '';
     if (h.startsWith('#/admin')) return 'admin';
     if (h.startsWith('#/live')) return 'live';
+    if (h.startsWith('#/player')) return 'player';
+    if (h.startsWith('#/match')) return 'match';
     return 'root';
   });
+  const [routeParam, setRouteParam] = useState<string | null>(null);
 
   useEffect(() => {
     const onHash = () => {
       const h = window.location.hash || '';
-      if (h.startsWith('#/admin')) setRoute('admin');
-      else if (h.startsWith('#/live')) setRoute('live');
-      else setRoute('root');
+      if (h.startsWith('#/admin')) { setRoute('admin'); setRouteParam(null); }
+      else if (h.startsWith('#/live')) { setRoute('live'); setRouteParam(null); }
+      else if (h.startsWith('#/player')) { setRoute('player'); setRouteParam(h.split('/')[2] ? decodeURIComponent(h.split('/')[2]) : null); }
+      else if (h.startsWith('#/match')) { setRoute('match'); setRouteParam(h.split('/')[2] ? decodeURIComponent(h.split('/')[2]) : null); }
+      else { setRoute('root'); setRouteParam(null); }
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -141,7 +148,7 @@ const App: React.FC = () => {
   const bcRef = React.useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
-    // setup BroadcastChannel
+    // setup BroadcastChannel (best-effort)
     try {
       bcRef.current = new BroadcastChannel('tpl-live');
     } catch (e) {
@@ -151,21 +158,25 @@ const App: React.FC = () => {
     const onBC = (ev: MessageEvent) => {
       const data = ev.data || {};
       if (!data.type) return;
-      if (data.type === 'active') {
-        setActiveMatch(data.payload);
-      } else if (data.type === 'match-saved') {
-        setMatchHistory(prev => {
-          const updated = [data.payload, ...prev];
-          localStorage.setItem('tpl_match_history', JSON.stringify(updated));
-          return updated;
-        });
-      } else if (data.type === 'clear') {
-        setActiveMatch(null);
-      } else if (data.type === 'matches-updated') {
-        if (Array.isArray(data.payload)) {
-          setMatchHistory(data.payload);
-          localStorage.setItem('tpl_match_history', JSON.stringify(data.payload));
+      try {
+        if (data.type === 'active') {
+          setActiveMatch(data.payload);
+        } else if (data.type === 'match-saved') {
+          setMatchHistory(prev => {
+            const updated = [data.payload, ...prev];
+            localStorage.setItem('tpl_match_history', JSON.stringify(updated));
+            return updated;
+          });
+        } else if (data.type === 'clear') {
+          setActiveMatch(null);
+        } else if (data.type === 'matches-updated') {
+          if (Array.isArray(data.payload)) {
+            setMatchHistory(data.payload);
+            localStorage.setItem('tpl_match_history', JSON.stringify(data.payload));
+          }
         }
+      } catch (err) {
+        console.error('Failed handling BC message', err);
       }
     };
 
@@ -173,22 +184,18 @@ const App: React.FC = () => {
 
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
-      if (e.key === 'tpl_active_match') {
-        try {
+      try {
+        if (e.key === 'tpl_active_match') {
           const amRaw = e.newValue;
           const am = amRaw ? JSON.parse(amRaw) : null;
           setActiveMatch(am);
-        } catch (err) {
-          setActiveMatch(null);
         }
-      }
-      if (e.key === 'tpl_match_history') {
-        try {
+        if (e.key === 'tpl_match_history') {
           const mh = e.newValue ? JSON.parse(e.newValue) : [];
           setMatchHistory(mh);
-        } catch (err) {
-          // ignore
         }
+      } catch (err) {
+        // ignore parse errors
       }
     };
 
@@ -202,13 +209,33 @@ const App: React.FC = () => {
       setActiveMatch(null);
     }
 
+    // Poll as a last-resort fallback for environments where BroadcastChannel/storage events aren't reliable
+    const pollInterval = setInterval(() => {
+      try {
+        const raw = localStorage.getItem('tpl_active_match');
+        if (!raw) {
+          if (activeMatch !== null) setActiveMatch(null);
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        // quick shallow compare by stringifying (cheap but reliable for our payloads)
+        const currentRaw = activeMatch ? JSON.stringify(activeMatch) : null;
+        if (currentRaw !== raw) {
+          setActiveMatch(parsed);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }, 800);
+
     return () => {
       window.removeEventListener('storage', onStorage);
       try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
       try { bcRef.current?.close(); } catch (e) {}
       bcRef.current = null;
+      clearInterval(pollInterval);
     };
-  }, []);
+  }, [activeMatch]);
 
   // ADMIN token gating (client-side). Set `VITE_ADMIN_TOKEN` at build time to require a token.
   // Note: this is client-side only and not cryptographically secure. For real security use a backend.
@@ -388,6 +415,18 @@ const App: React.FC = () => {
           )
         )}
 
+        {route === 'player' && routeParam && (
+          <PlayerPage playerName={routeParam} matchHistory={matchHistory} onBack={() => window.location.hash = ''} />
+        )}
+
+        {route === 'match' && routeParam && (
+          (() => {
+            const m = matchHistory.find(mm => mm.id === routeParam);
+            if (m) return <MatchDetail match={m} onBack={() => window.location.hash = ''} />;
+            return <div className="max-w-2xl mx-auto px-4 mt-12 text-center text-gray-400">Match not found</div>;
+          })()
+        )}
+
         {route === 'live' && (
           <LiveView teams={TEAMS} activeMatch={activeMatch} matchHistory={matchHistory} pointsTable={pointsTable} />
         )}
@@ -437,6 +476,10 @@ const App: React.FC = () => {
                                   {match.teamB}
                                 </p>
                                 <p className="text-3xl font-bebas text-white">{match.scoreB}/{match.wicketsB} <span className="text-xs text-gray-500 font-sans">({match.oversB} ov)</span></p>
+                              </div>
+
+                              <div className="absolute top-3 right-3">
+                                <a href={`#/match/${encodeURIComponent(match.id)}`} className="text-xs bg-white/5 px-3 py-1 rounded hover:bg-white/10">Details</a>
                               </div>
                             </div>
                             <div className="mt-4 pt-4 border-t border-white/5 text-center">
