@@ -388,14 +388,43 @@ const App: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2">
               <a href="#/live" className="text-[10px] bg-white/5 hover:bg-white/10 text-white px-3 py-1 rounded-md border border-white/10 transition-all font-bold">Live View</a>
-              <a href="#/admin" className="text-[10px] bg-yellow-400 hover:bg-yellow-300 text-black px-3 py-1 rounded-md border border-yellow-400 transition-all font-bold">Admin</a>
-              <button 
-                type="button"
-                onClick={resetHistory}
-                className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-1 rounded-md border border-red-900 transition-all font-bold cursor-pointer relative z-50"
-              >
-                Clear Data
-              </button>
+              {/* Show Admin link only when no ADMIN_TOKEN is set (open by default) or when user is authenticated */}
+              {( !ADMIN_TOKEN || isAdminAuthenticated ) && (
+                <a href="#/admin" className="text-[10px] bg-yellow-400 hover:bg-yellow-300 text-black px-3 py-1 rounded-md border border-yellow-400 transition-all font-bold">Admin</a>
+              )}
+
+              {/* Clear data / lock controls are admin-only when token set */}
+              {isAdminAuthenticated ? (
+                <>
+                  <button 
+                    type="button"
+                    onClick={resetHistory}
+                    className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-1 rounded-md border border-red-900 transition-all font-bold cursor-pointer relative z-50"
+                  >
+                    Clear Data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // lock admin (clear session key)
+                      try { sessionStorage.removeItem('tpl_admin_key'); } catch (e) {}
+                      setIsAdminAuthenticated(false);
+                      // remove token from hash if present
+                      if (window.location.hash.includes('key=')) {
+                        const base = window.location.hash.split('?')[0] || '#/admin';
+                        window.location.hash = base;
+                      }
+                      alert('Admin locked — you are now in view-only mode.');
+                    }}
+                    className="text-[10px] bg-gray-700/20 hover:bg-gray-700/40 text-gray-200 px-3 py-1 rounded-md border border-gray-700 transition-all font-bold"
+                  >
+                    Lock Admin
+                  </button>
+                </>
+              ) : (
+                // when not authenticated and token set, hide clear data and admin link to avoid accidental privilege exposure
+                null
+              )}
             </div>
           )}
         </div>
