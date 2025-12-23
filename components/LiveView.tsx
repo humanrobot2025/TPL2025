@@ -89,12 +89,19 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
           {activeMatch.ballHistory && activeMatch.ballHistory.length > 0 && (
             <div className="mt-6">
               <div className="text-sm text-gray-400 mb-2">Recent balls</div>
-              <div className="flex gap-2 flex-wrap">
-                {activeMatch.ballHistory.slice(-12).reverse().map((b: any, i: number) => (
-                  <div key={i} className={`p-2 rounded ${b.isWicket ? 'bg-red-600' : (b.type === 'extra' ? 'bg-blue-600' : 'bg-gray-800')}`}>{b.isWicket ? 'W' : (b.type === 'extra' ? `E${b.runs}` : b.runs)}</div>
-                ))}
-              </div>
-            </div>
+              <div className="space-y-2">
+                {activeMatch.ballHistory.slice(-24).map((b: any, idx: number) => {
+                  const i = activeMatch.ballHistory.length - 1 - idx;
+                  const over = Math.floor((activeMatch.legalBallsInOver + activeMatch.totalOvers*6 - (activeMatch.ballHistory.length-1 - i))/6);
+                  const ballInOver = ((i % 6) + 1);
+                  return (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className={`w-10 text-xs text-gray-400 text-center ${b.isWicket ? 'text-red-400' : ''}`}>{`${over}.${ballInOver}`}</div>
+                      <div className={`p-2 rounded ${b.isWicket ? 'bg-red-600' : (b.type === 'extra' ? 'bg-blue-600' : 'bg-gray-800')}`}>{b.isWicket ? 'W' : (b.type === 'extra' ? `E${b.runs}` : b.runs)}</div>
+                      <div className="text-sm text-gray-300">{b.batsman} → {b.bowler}</div>
+                    </div>
+                  );
+                })}
           )}
 
           {/* Full scorecard & players */}
