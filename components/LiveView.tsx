@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MatchRecord, PointsTableRow, Team } from '../types';
 import PointsTable from './PointsTable';
 
@@ -22,13 +22,83 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
     return activeMatch.teamBName || '';
   };
 
-  // helpers to get current players and current ball
-  const striker = activeMatch?.striker || '';
-  const nonStriker = activeMatch?.nonStriker || '';
-  const bowler = activeMatch?.currentBowler || '';
-  const lastBall = activeMatch?.ballHistory && activeMatch.ballHistory.length > 0 ? activeMatch.ballHistory[activeMatch.ballHistory.length - 1] : null;
+  // Local live state (listen directly for storage/Broadcast updates to ensure realtime updates)
+  const [liveMatch, setLiveMatch] = useState<any | null>(activeMatch);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const bcRef = useRef<BroadcastChannel | null>(null);
 
-  const scorecardSource = activeMatch?.playerStats ? activeMatch.playerStats : (matchHistory && matchHistory[0] && matchHistory[0].playerStats) ? matchHistory[0].playerStats : {};
+  useEffect(() => {
+    setLiveMatch(activeMatch);
+  }, [activeMatch]);
+
+  useEffect(() => {
+    // Setup BroadcastChannel
+    try {
+      bcRef.current = new BroadcastChannel('tpl-live');
+    } catch (e) {
+      bcRef.current = null;
+    }
+
+    const onBC = (ev: MessageEvent) => {
+      const data = ev.data || {};
+      if (!data.type) return;
+      if (data.type === 'active') {
+        setLiveMatch(data.payload);
+        setLastUpdated(Date.now());
+      } else if (data.type === 'clear') {
+        setLiveMatch(null);
+        setLastUpdated(Date.now());
+      } else if (data.type === 'match-saved') {
+        // optional: update recent results
+      }
+    };
+
+    bcRef.current?.addEventListener('message', onBC as any);
+
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key === 'tpl_active_match') {
+        try {
+          const am = e.newValue ? JSON.parse(e.newValue) : null;
+          setLiveMatch(am);
+          setLastUpdated(Date.now());
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+
+    // Poll fallback
+    const poll = setInterval(() => {
+      try {
+        const raw = localStorage.getItem('tpl_active_match');
+        const parsed = raw ? JSON.parse(raw) : null;
+        const currentRaw = liveMatch ? JSON.stringify(liveMatch) : null;
+        if ((raw && currentRaw !== raw) || (!raw && liveMatch !== null)) {
+          setLiveMatch(parsed);
+          setLastUpdated(Date.now());
+        }
+      } catch (err) {}
+    }, 800);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
+      try { bcRef.current?.close(); } catch (e) {}
+      bcRef.current = null;
+      clearInterval(poll);
+    };
+  }, [liveMatch]);
+
+  // helpers to get current players and current ball
+  const striker = liveMatch?.striker || '';
+  const nonStriker = liveMatch?.nonStriker || '';
+  const bowler = liveMatch?.currentBowler || '';
+  const lastBall = liveMatch?.ballHistory && liveMatch.ballHistory.length > 0 ? liveMatch.ballHistory[liveMatch.ballHistory.length - 1] : null;
+
+  const scorecardSource = liveMatch?.playerStats ? liveMatch.playerStats : (matchHistory && matchHistory[0] && matchHistory[0].playerStats) ? matchHistory[0].playerStats : {};
 
   const renderPlayerRow = (name: string, stats: any) => (
     <div key={name} className="flex items-center justify-between border-b border-white/5 py-2">
@@ -84,7 +154,7 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
               )}
 
               {/* Current players */}
-              <div className="mt-4 bg-white/3 p-3 rounded-md">
+              <div className="mt-4 bg-white/3 p-3 rounded-md relative">
                 <div className="text-xs text-gray-400 mb-2">Current players</div>
                 <div className="grid grid-cols-2 gap-2 text-left">
                   <div className="text-sm text-gray-200">Striker</div>
@@ -96,6 +166,9 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
                   <div className="text-sm text-gray-200">Last ball</div>
                   <div className="text-sm text-gray-200">{lastBall ? (lastBall.isWicket ? 'W' : (lastBall.type === 'extra' ? `E${lastBall.runs}` : lastBall.runs)) : '—'}</div>
                 </div>
+                {lastUpdated && (
+                  <div className="absolute top-2 right-3 text-[11px] text-gray-400">Updated: {new Date(lastUpdated).toLocaleTimeString()}</div>
+                )}
               </div>
             </div>
 
