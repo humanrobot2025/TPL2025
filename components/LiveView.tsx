@@ -22,6 +22,21 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
     return activeMatch.teamBName || '';
   };
 
+  // helpers to get current players and current ball
+  const striker = activeMatch?.striker || '';
+  const nonStriker = activeMatch?.nonStriker || '';
+  const bowler = activeMatch?.currentBowler || '';
+  const lastBall = activeMatch?.ballHistory && activeMatch.ballHistory.length > 0 ? activeMatch.ballHistory[activeMatch.ballHistory.length - 1] : null;
+
+  const scorecardSource = activeMatch?.playerStats ? activeMatch.playerStats : (matchHistory && matchHistory[0] && matchHistory[0].playerStats) ? matchHistory[0].playerStats : {};
+
+  const renderPlayerRow = (name: string, stats: any) => (
+    <div key={name} className="flex items-center justify-between border-b border-white/5 py-2">
+      <div className="text-sm text-gray-200">{name}</div>
+      <div className="text-xs text-gray-400">{stats ? `${stats.runs} (${stats.balls})` : '–'}</div>
+    </div>
+  );
+
   return (
     <div className="max-w-4xl mx-auto px-4 mt-8 space-y-6">
       <div className="flex justify-between items-center">
@@ -45,6 +60,21 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
               {activeMatch.currentInnings === 2 && activeMatch.innings1Score != null && (
                 <div className="text-xs text-gray-400 mt-2">Target: {activeMatch.innings1Score + 1}</div>
               )}
+
+              {/* Current players */}
+              <div className="mt-4 bg-white/3 p-3 rounded-md">
+                <div className="text-xs text-gray-400 mb-2">Current players</div>
+                <div className="grid grid-cols-2 gap-2 text-left">
+                  <div className="text-sm text-gray-200">Striker</div>
+                  <div className="text-sm text-yellow-400 font-bold">{striker || '—'}</div>
+                  <div className="text-sm text-gray-200">Non-striker</div>
+                  <div className="text-sm text-yellow-400 font-bold">{nonStriker || '—'}</div>
+                  <div className="text-sm text-gray-200">Bowler</div>
+                  <div className="text-sm text-yellow-400 font-bold">{bowler || '—'}</div>
+                  <div className="text-sm text-gray-200">Last ball</div>
+                  <div className="text-sm text-gray-200">{lastBall ? (lastBall.isWicket ? 'W' : (lastBall.type === 'extra' ? `E${lastBall.runs}` : lastBall.runs)) : '—'}</div>
+                </div>
+              </div>
             </div>
 
             <div className="flex-1 text-center">
@@ -66,6 +96,50 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
               </div>
             </div>
           )}
+
+          {/* Full scorecard & players */}
+          <div className="mt-6 grid md:grid-cols-2 gap-4">
+            <div className="bg-black/50 p-4 rounded-2xl border border-white/10">
+              <div className="text-sm text-gray-400 mb-2">Full scorecard</div>
+              {Object.keys(scorecardSource).length === 0 ? (
+                <div className="text-sm text-gray-500">No player stats available</div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Batters */}
+                  <div className="text-xs text-gray-400 mb-1">Batting</div>
+                  {Object.entries(scorecardSource).filter(([_, s]: any) => (s.balls || s.runs) ? true : false).map(([name, s]: any) => (
+                    <div key={name} className="flex items-center justify-between border-b border-white/5 py-2">
+                      <div className="text-sm text-gray-200">{name}</div>
+                      <div className="text-xs text-gray-400">{s.runs} ({s.balls})</div>
+                    </div>
+                  ))}
+
+                  {/* Bowlers */}
+                  <div className="mt-3 text-xs text-gray-400 mb-1">Bowling</div>
+                  {Object.entries(scorecardSource).filter(([_, s]: any) => (s.ballsBowled || s.wickets) ? true : false).map(([name, s]: any) => (
+                    <div key={name} className="flex items-center justify-between border-b border-white/5 py-2">
+                      <div className="text-sm text-gray-200">{name}</div>
+                      <div className="text-xs text-gray-400">{(s.oversBowled || s.ballsBowled) ? `${s.oversBowled || Math.floor((s.ballsBowled||0)/6)}.${(s.ballsBowled||0)%6}` : '0.0'} • {s.wickets || 0}w • {s.runsConceded || 0}r</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-black/50 p-4 rounded-2xl border border-white/10">
+              <div className="text-sm text-gray-400 mb-2">Team players</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{teamName('A')}</div>
+                  {teams.find(t => t.name === teamName('A'))?.players?.map(p => <div key={p.name} className="text-sm text-gray-200">{p.name}{p.isCaptain ? ' • (C)' : ''}</div>)}
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{teamName('B')}</div>
+                  {teams.find(t => t.name === teamName('B'))?.players?.map(p => <div key={p.name} className="text-sm text-gray-200">{p.name}{p.isCaptain ? ' • (C)' : ''}</div>)}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="bg-white/5 p-6 rounded-2xl text-center text-gray-400">No active live match. Showing latest results below.</div>
