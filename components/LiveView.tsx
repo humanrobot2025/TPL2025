@@ -50,8 +50,30 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
             <div className="flex-1 text-center">
               <div className="text-xs text-gray-400">Innings {activeMatch.currentInnings || 1}</div>
               <div className="text-4xl md:text-5xl font-bebas text-white mt-1">{teamName('A')}</div>
-              <div className="text-6xl md:text-7xl font-bebas text-yellow-400 mt-2">{activeMatch.runs || 0}</div>
-              <div className="text-sm text-gray-400 mt-1">Wickets: {activeMatch.wickets || 0}</div>
+              <div className="text-6xl md:text-7xl font-bebas text-yellow-400 mt-2">
+                {/* Show only batting team's score or final scores when both innings present */}
+                {(function(){
+                  const ci = activeMatch.currentInnings || 1;
+                  const bothPresent = (activeMatch.runsB != null) || (activeMatch.status === 'RESULT');
+                  if (bothPresent) {
+                    return activeMatch.runs ?? 0;
+                  }
+                  if (ci === 1) {
+                    return activeMatch.runs ?? 0;
+                  }
+                  // innings 2 in progress — show only innings1 summary for team A
+                  if (activeMatch.innings1Score != null) return activeMatch.innings1Score;
+                  return '—';
+                })()
+              }</div>
+              <div className="text-sm text-gray-400 mt-1">Wickets: {(function(){
+                const ci = activeMatch.currentInnings || 1;
+                const bothPresent = (activeMatch.runsB != null) || (activeMatch.status === 'RESULT');
+                if (bothPresent) return activeMatch.wickets ?? 0;
+                if (ci === 1) return activeMatch.wickets ?? 0;
+                if (activeMatch.innings1Wickets != null) return activeMatch.innings1Wickets;
+                return '—';
+              })()}</div>
             </div>
 
             <div className="text-center md:px-6">
@@ -80,8 +102,25 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
             <div className="flex-1 text-center">
               <div className="text-xs text-gray-400">{'' /* placeholder for symmetry */}</div>
               <div className="text-4xl md:text-5xl font-bebas text-white mt-1">{teamName('B')}</div>
-              <div className="text-6xl md:text-7xl font-bebas text-yellow-400 mt-2">{activeMatch.runsB != null ? activeMatch.runsB : activeMatch.runs || 0}</div>
-              <div className="text-sm text-gray-400 mt-1">Wickets: {activeMatch.wicketsB != null ? activeMatch.wicketsB : activeMatch.wickets || 0}</div>
+              <div className="text-6xl md:text-7xl font-bebas text-yellow-400 mt-2">{(function(){
+                const ci = activeMatch.currentInnings || 1;
+                const bothPresent = (activeMatch.runsB != null) || (activeMatch.status === 'RESULT');
+                if (bothPresent) {
+                  return activeMatch.runsB ?? 0;
+                }
+                if (ci === 2) {
+                  return activeMatch.runs ?? 0;
+                }
+                // innings 1 in progress — show placeholder for team B
+                return '—';
+              })()}</div>
+              <div className="text-sm text-gray-400 mt-1">Wickets: {(function(){
+                const ci = activeMatch.currentInnings || 1;
+                const bothPresent = (activeMatch.runsB != null) || (activeMatch.status === 'RESULT');
+                if (bothPresent) return activeMatch.wicketsB ?? 0;
+                if (ci === 2) return activeMatch.wickets ?? 0;
+                return '—';
+              })()}</div>
             </div>
           </div>
 
@@ -89,19 +128,12 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
           {activeMatch.ballHistory && activeMatch.ballHistory.length > 0 && (
             <div className="mt-6">
               <div className="text-sm text-gray-400 mb-2">Recent balls</div>
-              <div className="space-y-2">
-                {activeMatch.ballHistory.slice(-24).map((b: any, idx: number) => {
-                  const i = activeMatch.ballHistory.length - 1 - idx;
-                  const over = Math.floor((activeMatch.legalBallsInOver + activeMatch.totalOvers*6 - (activeMatch.ballHistory.length-1 - i))/6);
-                  const ballInOver = ((i % 6) + 1);
-                  return (
-                    <div key={idx} className="flex items-center gap-3">
-                      <div className={`w-10 text-xs text-gray-400 text-center ${b.isWicket ? 'text-red-400' : ''}`}>{`${over}.${ballInOver}`}</div>
-                      <div className={`p-2 rounded ${b.isWicket ? 'bg-red-600' : (b.type === 'extra' ? 'bg-blue-600' : 'bg-gray-800')}`}>{b.isWicket ? 'W' : (b.type === 'extra' ? `E${b.runs}` : b.runs)}</div>
-                      <div className="text-sm text-gray-300">{b.batsman} → {b.bowler}</div>
-                    </div>
-                  );
-                })}
+              <div className="flex gap-2 flex-wrap">
+                {activeMatch.ballHistory.slice(-12).reverse().map((b: any, i: number) => (
+                  <div key={i} className={`p-2 rounded ${b.isWicket ? 'bg-red-600' : (b.type === 'extra' ? 'bg-blue-600' : 'bg-gray-800')}`}>{b.isWicket ? 'W' : (b.type === 'extra' ? `E${b.runs}` : b.runs)}</div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Full scorecard & players */}
