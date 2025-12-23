@@ -184,15 +184,13 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
     setRuns(prev => prev + totalRunsOnBall);
     setBallHistory(prev => [...prev, newBall]);
 
-    const bStats = matchPlayerStats[striker] || { runs: 0, balls: 0, fours: 0, sixes: 0, dots: 0, wickets: 0, oversBowled: 0, ballsBowled: 0, runsConceded: 0 };
-
+    const bStats = matchPlayerStats[striker] || { runs: 0, balls: 0, fours: 0, sixes: 0, wickets: 0, oversBowled: 0, ballsBowled: 0, runsConceded: 0 };
     if (type === 'legal') {
       updatePlayerStats(striker, 'bat', {
         balls: (bStats.balls || 0) + 1,
         runs: (bStats.runs || 0) + runVal,
         fours: (bStats.fours || 0) + (runVal === 4 ? 1 : 0),
         sixes: (bStats.sixes || 0) + (runVal === 6 ? 1 : 0),
-        dots: (bStats.dots || 0) + (runVal === 0 && !isWicket ? 1 : 0),
       });
     }
 
@@ -286,12 +284,9 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
 
   const finishInnings = () => {
     if (currentInnings === 1) {
-      // Save innings 1 ball history snapshot
       setInnings1Score(runs);
       setInnings1Wickets(wickets);
       setInnings1Overs(`${totalOvers}.${legalBallsInOver}`);
-      try { sessionStorage.setItem('tpl_innings1_ball_history', JSON.stringify(ballHistory)); } catch (e) {}
-
       setCurrentInnings(2);
       setRuns(0);
       setWickets(0);
@@ -311,34 +306,6 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       setWinner(winnerName);
       if (winnerName !== 'Draw') confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
 
-      // Read innings1 ball history snapshot if present
-      let innings1BallHistory: any[] = [];
-      try { const raw = sessionStorage.getItem('tpl_innings1_ball_history'); innings1BallHistory = raw ? JSON.parse(raw) : []; sessionStorage.removeItem('tpl_innings1_ball_history'); } catch (e) { innings1BallHistory = []; }
-
-      // Build fall-of-wickets for each innings
-      const buildFallOfWickets = (balls: any[]) => {
-        const list: any[] = [];
-        let score = 0;
-        let legalCount = 0;
-        let overIndex = 0;
-        for (const b of balls) {
-          // runs in ball
-          score += b.runs || 0;
-          if (b.type === 'legal') {
-            legalCount += 1;
-            if (legalCount === 6) { overIndex += 1; legalCount = 0; }
-          }
-          if (b.isWicket) {
-            const overStr = `${overIndex}.${legalCount % 6}`;
-            list.push({ batsman: b.batsman, score: score, over: overStr });
-          }
-        }
-        return list;
-      };
-
-      const fallOfWickets1 = buildFallOfWickets(innings1BallHistory || []);
-      const fallOfWickets2 = buildFallOfWickets(ballHistory || []);
-
       const record: MatchRecord = {
         id: Date.now().toString(),
         teamA: teams[teamAIdx].name,
@@ -347,11 +314,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
         scoreB: runs, wicketsB: wickets, oversB: `${totalOvers}.${legalBallsInOver}`,
         winner: winnerName, 
         date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        playerStats: { ...matchPlayerStats },
-        innings1BallHistory: innings1BallHistory,
-        innings2BallHistory: ballHistory,
-        fallOfWickets1: fallOfWickets1,
-        fallOfWickets2: fallOfWickets2
+        playerStats: { ...matchPlayerStats }
       };
 
       onSaveMatch(record);

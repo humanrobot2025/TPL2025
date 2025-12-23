@@ -70,7 +70,7 @@ export default function MatchDetail({ match, onBack } : { match: MatchRecord; on
                 {playerRows.filter(([_, s]: any) => (s.balls || s.runs)).map(([n, s]: any) => (
                   <div key={n} className="flex items-center justify-between border-b border-white/5 py-2">
                     <div className="text-sm text-gray-200">{n}</div>
-                    <div className="text-sm text-yellow-400">{s.runs || 0} ({s.balls || 0}) • {s.fours || 0}x4 • {s.sixes || 0}x6 • {s.dots || 0} dots</div>
+                    <div className="text-sm text-yellow-400">{s.runs || 0} ({s.balls || 0})</div>
                   </div>
                 ))}
               </div>
@@ -83,54 +83,21 @@ export default function MatchDetail({ match, onBack } : { match: MatchRecord; on
               <div className="text-sm text-gray-400">No bowling stats</div>
             ) : (
               <div className="space-y-2">
-                {(() => {
-                  const bowlers = playerRows.filter(([_, s]: any) => (s.ballsBowled || s.wickets));
-                  // compute maidens by grouping overs using ballsBowled per bowler if present, otherwise omit
-                  return bowlers.map(([n, s]: any) => {
-                    const balls = s.ballsBowled || 0;
-                    const overs = `${Math.floor(balls/6)}.${balls%6}`;
-                    // attempt to compute maidens if detailed ball history present
-                    const maidens = (() => {
-                      // not a perfect method without ball-by-ball per bowler per over, so show 0 if not computable
-                      return s.maidens || 0;
-                    })();
-                    return (
-                      <div key={n} className="flex items-center justify-between border-b border-white/5 py-2">
-                        <div className="text-sm text-gray-200">{n}</div>
-                        <div className="text-sm text-yellow-400">{overs} • {s.wickets || 0}w • {s.runsConceded || 0}r • {maidens}m</div>
-                      </div>
-                    );
-                  });
-                })()}
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Innings 1</div>
-                  <div className="space-y-1">
-                    {match.innings1BallHistory.map((b:any, i:number) => (
-                      <div key={i} className="flex items-center gap-3 text-sm text-gray-200">
-                        <div className="w-12 text-xs text-gray-400">{`${Math.floor(i/6)}.${(i%6)+1}`}</div>
-                        <div className={`p-2 rounded ${b.isWicket ? 'bg-red-600' : (b.type === 'extra' ? 'bg-blue-600' : 'bg-gray-800')}`}>{b.isWicket ? 'W' : (b.type === 'extra' ? `E${b.runs}` : b.runs)}</div>
-                        <div className="text-sm text-gray-300">{b.batsman} → {b.bowler}</div>
-                      </div>
-                    ))}
+                {playerRows.filter(([_, s]: any) => (s.ballsBowled || s.wickets)).map(([n, s]: any) => (
+                  <div key={n} className="flex items-center justify-between border-b border-white/5 py-2">
+                    <div className="text-sm text-gray-200">{n}</div>
+                    <div className="text-sm text-yellow-400">{(s.oversBowled || Math.floor((s.ballsBowled||0)/6))}.{(s.ballsBowled||0)%6} • {s.wickets || 0}w • {s.runsConceded || 0}r</div>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
-              {match.innings2BallHistory && match.innings2BallHistory.length > 0 && (
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Innings 2</div>
-                  <div className="space-y-1">
-                    {match.innings2BallHistory.map((b:any, i:number) => (
-                      <div key={i} className="flex items-center gap-3 text-sm text-gray-200">
-                        <div className="w-12 text-xs text-gray-400">{`${Math.floor(i/6)}.${(i%6)+1}`}</div>
-                        <div className={`p-2 rounded ${b.isWicket ? 'bg-red-600' : (b.type === 'extra' ? 'bg-blue-600' : 'bg-gray-800')}`}>{b.isWicket ? 'W' : (b.type === 'extra' ? `E${b.runs}` : b.runs)}</div>
-                        <div className="text-sm text-gray-300">{b.batsman} → {b.bowler}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+        <div className="mt-6">
+          <h4 className="text-sm text-gray-400 mb-2">Ball-by-ball</h4>
+          {match.playerStats && match.playerStats ? (
+            <div className="text-sm text-gray-300">(Ball-by-ball log is available in Live view)</div>
           ) : (
             <div className="text-sm text-gray-400">No ball-by-ball data saved</div>
           )}

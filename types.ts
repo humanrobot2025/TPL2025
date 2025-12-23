@@ -17,11 +17,10 @@ export interface MatchPlayerStats {
     balls: number;
     fours: number;
     sixes: number;
-    dots?: number;
     wickets: number;
-    oversBowled?: number;
-    ballsBowled?: number;
-    runsConceded?: number;
+    oversBowled: number;
+    ballsBowled: number;
+    runsConceded: number;
   }
 }
 
@@ -45,12 +44,6 @@ export interface BallRecord {
   bowler: string;
 }
 
-export interface FallOfWicket {
-  batsman: string;
-  score: number;
-  over: string;
-}
-
 export interface MatchRecord {
   id: string;
   teamA: string;
@@ -64,10 +57,6 @@ export interface MatchRecord {
   winner: string;
   date: string;
   playerStats?: MatchPlayerStats;
-  innings1BallHistory?: BallRecord[];
-  innings2BallHistory?: BallRecord[];
-  fallOfWickets1?: FallOfWicket[];
-  fallOfWickets2?: FallOfWicket[];
 }
 
 export enum MatchStatus {
