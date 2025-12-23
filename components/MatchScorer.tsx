@@ -45,6 +45,20 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
   const bcRef = React.useRef<BroadcastChannel | null>(null);
 
   React.useEffect(() => {
+    // Check for a setup preset (e.g., from Admin -> Start Match)
+    try {
+      const presetRaw = sessionStorage.getItem('tpl_setup_preset');
+      if (presetRaw) {
+        const p = JSON.parse(presetRaw);
+        if (typeof p.teamAIdx === 'number') setTeamAIdx(p.teamAIdx);
+        if (typeof p.teamBIdx === 'number') setTeamBIdx(p.teamBIdx);
+        if (typeof p.matchOvers === 'number') setMatchOvers(p.matchOvers);
+        sessionStorage.removeItem('tpl_setup_preset');
+      }
+    } catch (err) {
+      // ignore
+    }
+
     // set up BroadcastChannel for cross-tab realtime updates
     try {
       bcRef.current = new BroadcastChannel('tpl-live');

@@ -212,7 +212,7 @@ const App: React.FC = () => {
 
   // ADMIN token gating (client-side). Set `VITE_ADMIN_TOKEN` at build time to require a token.
   // Note: this is client-side only and not cryptographically secure. For real security use a backend.
-  const ADMIN_TOKEN = (import.meta.env.VITE_ADMIN_TOKEN as string) || '';
+  const ADMIN_TOKEN = ((import.meta as any).env?.VITE_ADMIN_TOKEN as string) || '';
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     if (!ADMIN_TOKEN) return true; // no token set → open by default for dev
     try {
@@ -310,6 +310,33 @@ const App: React.FC = () => {
     setActiveMatch(null);
   };
 
+  // Start a fresh tournament: clear history and active match, set a flag
+  const startTournament = () => {
+    if (!confirm('Start a new tournament? This will clear all saved match history and reset points.')) return;
+    const updatedHistory: MatchRecord[] = [];
+    setMatchHistory(updatedHistory);
+    localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
+    localStorage.setItem('tpl_tournament_started', new Date().toISOString());
+    localStorage.removeItem('tpl_active_match');
+    try { bcRef.current?.postMessage({ type: 'matches-updated', payload: updatedHistory }); } catch (e) {}
+    try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
+    setActiveMatch(null);
+    // navigate to root scorer
+    window.location.hash = '';
+  };
+
+  // Load a saved match into scorer setup (prefill teams/overs) and navigate to scorer
+  const loadMatchPreset = (m: MatchRecord) => {
+    const teamAIdx = TEAMS.findIndex(t => t.name === m.teamA);
+    const teamBIdx = TEAMS.findIndex(t => t.name === m.teamB);
+    const parts = (m.oversB || m.oversA || '5').split('.');
+    const whole = parseInt(parts[0] || '5', 10) || 5;
+    const preset = { teamAIdx: (teamAIdx >= 0 ? teamAIdx : 0), teamBIdx: (teamBIdx >= 0 ? teamBIdx : 1), matchOvers: whole };
+    try { sessionStorage.setItem('tpl_setup_preset', JSON.stringify(preset)); } catch (e) {}
+    // navigate to root where scorer is available for admins
+    window.location.hash = '';
+  };
+
   return (
     <div className="min-h-screen stadium-bg text-white pb-20 overflow-x-hidden">
       {/* Header */}
@@ -351,12 +378,12 @@ const App: React.FC = () => {
       <main className="max-w-4xl mx-auto px-4 mt-8">
         {route === 'admin' && (
           isAdminAuthenticated ? (
-            <AdminPage teams={TEAMS} matchHistory={matchHistory} onUpdateMatch={editMatch} onDeleteMatch={deleteMatch} onSetActiveMatch={publishSavedMatch} onClearActiveMatch={clearActiveMatch} />
+            <AdminPage teams={TEAMS} matchHistory={matchHistory} onUpdateMatch={editMatch} onDeleteMatch={deleteMatch} onSetActiveMatch={publishSavedMatch} onClearActiveMatch={clearActiveMatch} onStartTournament={startTournament} onLoadMatchPreset={loadMatchPreset} />
           ) : (
             <div className="max-w-2xl mx-auto px-4 mt-12 space-y-6 text-center">
               <h2 className="text-2xl font-bebas text-yellow-400">Admin Access Required</h2>
               <p className="text-gray-300">This page is protected. Append <code className="bg-white/5 px-2 py-1 rounded">?key=YOUR_TOKEN</code> to the URL, or enter your admin token below.</p>
-              <AdminUnlockForm onUnlock={handleAdminUnlock} showExampleLink={!!import.meta.env.VITE_ADMIN_TOKEN} />
+              <AdminUnlockForm onUnlock={handleAdminUnlock} showExampleLink={!!(import.meta as any).env?.VITE_ADMIN_TOKEN} />
             </div>
           )
         )}

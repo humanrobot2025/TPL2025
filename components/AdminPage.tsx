@@ -8,9 +8,11 @@ interface AdminPageProps {
   onDeleteMatch: (id: string) => void;
   onSetActiveMatch?: (match: MatchRecord) => void; // publish a saved match to Live view
   onClearActiveMatch?: () => void; // clear live match
+  onStartTournament?: () => void; // start/clear tournament
+  onLoadMatchPreset?: (m: MatchRecord) => void; // load a saved match into scorer setup
 }
 
-const AdminPage: React.FC<AdminPageProps> = ({ teams, matchHistory, onUpdateMatch, onDeleteMatch, onSetActiveMatch, onClearActiveMatch }) => {
+const AdminPage: React.FC<AdminPageProps> = ({ teams, matchHistory, onUpdateMatch, onDeleteMatch, onSetActiveMatch, onClearActiveMatch, onStartTournament, onLoadMatchPreset }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<MatchRecord>>({});
 
@@ -44,7 +46,12 @@ const AdminPage: React.FC<AdminPageProps> = ({ teams, matchHistory, onUpdateMatc
         <div className="text-sm text-gray-400">Editable list of saved matches</div>
       </div>
 
-      <div className="flex justify-end mt-3">
+      <div className="flex justify-end mt-3 gap-2">
+        {onStartTournament && (
+          <button onClick={() => {
+            if (confirm('Start a new tournament? This will clear saved matches and reset points.')) onStartTournament();
+          }} className="bg-indigo-600 text-white px-3 py-1 rounded">Start Tournament</button>
+        )}
         {onClearActiveMatch && (
           <button onClick={() => {
             if (confirm('Clear the currently published Live match?')) onClearActiveMatch();
@@ -81,6 +88,11 @@ const AdminPage: React.FC<AdminPageProps> = ({ teams, matchHistory, onUpdateMatc
                     <button onClick={() => {
                       if (confirm('Publish this match to Live view?')) onSetActiveMatch(m);
                     }} className="bg-green-600 text-white px-3 py-1 rounded">Make Live</button>
+                  )}
+                  {onLoadMatchPreset && (
+                    <button onClick={() => {
+                      if (confirm('Load this match into the scorer setup?')) onLoadMatchPreset(m);
+                    }} className="bg-blue-600 text-white px-3 py-1 rounded">Start Match</button>
                   )}
                 </div>
               </div>
