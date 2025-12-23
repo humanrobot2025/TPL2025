@@ -36,6 +36,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
   const [innings1Overs, setInnings1Overs] = useState('0.0');
   const [winner, setWinner] = useState<string>('');
   const [showFullScorecard, setShowFullScorecard] = useState(false);
+  const [lastSavedRecord, setLastSavedRecord] = useState<MatchRecord | null>(null);
   const [overCompletePulse, setOverCompletePulse] = useState(false);
 
   const isInvalidSetup = teamAIdx === teamBIdx;
@@ -267,8 +268,8 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       
       setWinner(winnerName);
       if (winnerName !== 'Draw') confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-      
-      onSaveMatch({
+
+      const record: MatchRecord = {
         id: Date.now().toString(),
         teamA: teams[teamAIdx].name,
         teamB: teams[teamBIdx].name,
@@ -277,9 +278,59 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
         winner: winnerName, 
         date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
         playerStats: { ...matchPlayerStats }
-      });
+      };
+
+      onSaveMatch(record);
+      setLastSavedRecord(record);
       setStatus(MatchStatus.RESULT);
     }
+  };
+
+  const escapeCSV = (v: any) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+
+  const exportMatchCSV = (record: MatchRecord) => {
+    const lines: string[] = [];
+    // Top-level match info
+    lines.push(['MatchID','Date','TeamA','TeamB','ScoreA','WktsA','OversA','ScoreB','WktsB','OversB','Winner'].join(','));
+    lines.push([
+      escapeCSV(record.id), escapeCSV(record.date), escapeCSV(record.teamA), escapeCSV(record.teamB),
+      escapeCSV(record.scoreA), escapeCSV(record.wicketsA), escapeCSV(record.oversA),
+      escapeCSV(record.scoreB), escapeCSV(record.wicketsB), escapeCSV(record.oversB), escapeCSV(record.winner)
+    ].join(','));
+    lines.push('');
+
+    // Player batting stats header
+    lines.push(['Batter','Runs','Balls','4s','6s','Wickets (bowling)','OversBowled','RunsConceded'].join(','));
+    const stats = record.playerStats || {};
+    const playerNames = Object.keys(stats);
+    if (playerNames.length === 0) {
+      lines.push('No player stats');
+    } else {
+      playerNames.forEach(name => {
+        const s: any = stats[name] || {};
+        lines.push([
+          escapeCSV(name), escapeCSV(s.runs || 0), escapeCSV(s.balls || 0), escapeCSV(s.fours || 0), escapeCSV(s.sixes || 0),
+          escapeCSV(s.wickets || 0), escapeCSV(s.oversBowled || 0), escapeCSV(s.runsConceded || 0)
+        ].join(','));
+      });
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `match-${record.id}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const getOverDisplay = (balls: number) => `${Math.floor(balls/6)}.${balls%6}`;
@@ -630,6 +681,33 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
               className="bg-yellow-400 hover:bg-yellow-300 text-black font-bebas text-3xl px-12 py-4 rounded-2xl transition-all shadow-xl active:scale-95"
             >
               Start New Match
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (lastSavedRecord) exportMatchCSV(lastSavedRecord);
+                else {
+                  // fallback construct minimal record from current state
+                  const fallback: MatchRecord = {
+                    id: Date.now().toString(),
+                    teamA: teams[teamAIdx].name,
+                    teamB: teams[teamBIdx].name,
+                    scoreA: innings1Score,
+                    wicketsA: innings1Wickets,
+                    oversA: innings1Overs,
+                    scoreB: runs,
+                    wicketsB: wickets,
+                    oversB: `${totalOvers}.${legalBallsInOver}`,
+                    winner: winner || 'Draw',
+                    date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    playerStats: { ...matchPlayerStats }
+                  };
+                  exportMatchCSV(fallback);
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bebas text-xl px-6 py-3 rounded-2xl transition-all border border-white/5"
+            >
+              Download CSV
             </button>
             <button 
               type="button"
