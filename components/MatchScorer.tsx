@@ -86,7 +86,11 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
   const battingTeam = currentInnings === 1 ? teams[teamAIdx] : teams[teamBIdx];
   const bowlingTeam = currentInnings === 1 ? teams[teamBIdx] : teams[teamAIdx];
 
-  const resetMatch = () => {
+  const resetMatch = (e?: React.MouseEvent) => {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
     // We clear state immediately for better responsiveness
     setStatus(MatchStatus.SETUP);
     setRuns(0);
@@ -105,8 +109,9 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
     localStorage.removeItem('tpl_active_match');
   };
 
-  const goToSetup = () => {
-    // Simple navigation back to setup without blocking confirm
+  const goToSetup = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setStatus(MatchStatus.SETUP);
   };
 
@@ -337,6 +342,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
           </div>
 
           <button 
+            type="button"
             onClick={startMatch} 
             disabled={isInvalidSetup}
             className={`w-full font-bebas text-2xl py-4 rounded-2xl shadow-xl transition-all active:scale-95 mt-4 ${isInvalidSetup ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50' : 'bg-yellow-400 hover:bg-yellow-300 text-black'}`}
@@ -349,10 +355,11 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       {(status === MatchStatus.INNINGS_1 || status === MatchStatus.INNINGS_2) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Header Action Row */}
-          <div className="lg:col-span-12 flex justify-between items-center mb-2 px-1">
+          <div className="lg:col-span-12 flex justify-between items-center mb-2 px-1 relative z-30">
             <button 
+              type="button"
               onClick={goToSetup} 
-              className="flex items-center gap-2 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-all bg-white/5 px-3 py-1.5 rounded-full border border-white/10 z-10 cursor-pointer"
+              className="flex items-center gap-2 text-[10px] font-black text-white hover:text-yellow-400 uppercase tracking-widest transition-all bg-white/5 px-4 py-2 rounded-full border border-white/10 z-50 cursor-pointer active:scale-95"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7" /></svg>
               Exit to Setup
@@ -430,11 +437,11 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] px-1">Legal Ball Score</label>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                   {[0, 1, 2, 3, 4, 6].map(r => (
-                    <button key={r} onClick={() => handleBall('legal', r)} className="bg-gray-800 hover:bg-gray-700 text-white font-bebas text-3xl py-4 rounded-2xl border-b-4 border-gray-950 transition-all active:translate-y-1 active:border-b-0">
+                    <button key={r} type="button" onClick={() => handleBall('legal', r)} className="bg-gray-800 hover:bg-gray-700 text-white font-bebas text-3xl py-4 rounded-2xl border-b-4 border-gray-950 transition-all active:translate-y-1 active:border-b-0">
                       {r}
                     </button>
                   ))}
-                  <button onClick={() => handleBall('legal', 0, true)} className="bg-red-600 hover:bg-red-500 text-white font-bebas text-3xl py-4 rounded-2xl border-b-4 border-red-950 transition-all active:translate-y-1 active:border-b-0">
+                  <button type="button" onClick={() => handleBall('legal', 0, true)} className="bg-red-600 hover:bg-red-500 text-white font-bebas text-3xl py-4 rounded-2xl border-b-4 border-red-950 transition-all active:translate-y-1 active:border-b-0">
                     WKT
                   </button>
                 </div>
@@ -444,7 +451,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
                 <label className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] px-1">Extra Runs (Wide / No Ball)</label>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                   {[1, 2, 3, 4, 5, 6, 7].map(extra => (
-                    <button key={extra} onClick={() => handleBall('extra', extra)} className="bg-blue-600 hover:bg-blue-500 text-white font-bebas text-2xl py-3 rounded-xl border-b-4 border-blue-900 transition-all active:translate-y-1 active:border-b-0">
+                    <button key={extra} type="button" onClick={() => handleBall('extra', extra)} className="bg-blue-600 hover:bg-blue-500 text-white font-bebas text-2xl py-3 rounded-xl border-b-4 border-blue-900 transition-all active:translate-y-1 active:border-b-0">
                       +{extra}
                     </button>
                   ))}
@@ -452,19 +459,25 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-4">
-                <button onClick={undoLastBall} className="bg-red-500 hover:bg-red-400 text-white font-bebas text-xl py-3 rounded-xl border-b-4 border-red-900 active:translate-y-1 active:border-b-0 flex items-center justify-center gap-2">
+                <button type="button" onClick={undoLastBall} className="bg-red-500 hover:bg-red-400 text-white font-bebas text-xl py-3 rounded-xl border-b-4 border-red-900 active:translate-y-1 active:border-b-0 flex items-center justify-center gap-2">
                    UNDO ↩
                 </button>
-                <button onClick={rotateStrike} className="bg-purple-600 hover:bg-purple-500 text-white font-bebas text-xl py-3 rounded-xl border-b-4 border-purple-900 active:translate-y-1 active:border-b-0 flex items-center justify-center gap-2">
+                <button type="button" onClick={rotateStrike} className="bg-purple-600 hover:bg-purple-500 text-white font-bebas text-xl py-3 rounded-xl border-b-4 border-purple-900 active:translate-y-1 active:border-b-0 flex items-center justify-center gap-2">
                    ROTATE 🔄
                 </button>
               </div>
 
               <div className="flex gap-4 pt-4 border-t border-white/5">
-                <button onClick={finishInnings} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bebas text-2xl py-4 rounded-2xl shadow-xl transition-all">
+                <button type="button" onClick={finishInnings} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bebas text-2xl py-4 rounded-2xl shadow-xl transition-all">
                   {currentInnings === 1 ? 'End First Innings' : 'Save Final Result'}
                 </button>
-                <button onClick={resetMatch} className="bg-gray-900 px-6 py-4 rounded-2xl text-[10px] font-black uppercase text-red-500 border border-red-900/30 hover:bg-red-900/10 transition-colors">Clear & Reset</button>
+                <button 
+                    type="button" 
+                    onClick={resetMatch} 
+                    className="bg-gray-900 px-6 py-4 rounded-2xl text-[10px] font-black uppercase text-red-500 border border-red-900/30 hover:bg-red-900/10 transition-colors z-30 relative"
+                >
+                    Clear & Reset
+                </button>
               </div>
             </div>
           </div>
@@ -499,6 +512,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       {status !== MatchStatus.SETUP && (
         <div className="mt-8 pt-8 border-t border-white/10">
           <button 
+            type="button"
             onClick={() => setShowFullScorecard(!showFullScorecard)}
             className="w-full text-center py-2 text-xs font-bold text-gray-500 uppercase tracking-widest hover:text-yellow-400 transition-colors"
           >
@@ -611,12 +625,14 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
           </div>
           <div className="flex flex-col gap-4 max-w-xs mx-auto">
             <button 
+              type="button"
               onClick={resetMatch} 
               className="bg-yellow-400 hover:bg-yellow-300 text-black font-bebas text-3xl px-12 py-4 rounded-2xl transition-all shadow-xl active:scale-95"
             >
               Start New Match
             </button>
             <button 
+              type="button"
               onClick={() => setStatus(MatchStatus.SETUP)} 
               className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bebas text-xl px-12 py-3 rounded-2xl transition-all border border-white/5 active:scale-95"
             >

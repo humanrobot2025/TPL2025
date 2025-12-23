@@ -54,11 +54,13 @@ const App: React.FC = () => {
   }, [matchHistory]);
 
   const resetHistory = () => {
-    if (window.confirm("Are you sure you want to clear ALL tournament data (Points, History, Active Match)? This cannot be undone.")) {
+    if (confirm("Clear all tournament results and match history?")) {
+      localStorage.removeItem('tpl_match_history');
+      localStorage.removeItem('tpl_active_match');
       localStorage.clear();
-      window.location.reload();
+      window.location.href = window.location.pathname; // Hard reload
     }
-  }
+  };
 
   return (
     <div className="min-h-screen stadium-bg text-white pb-20 overflow-x-hidden">
@@ -80,8 +82,9 @@ const App: React.FC = () => {
           </div>
           
           <button 
+            type="button"
             onClick={resetHistory}
-            className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-1 rounded-md border border-red-900 transition-all font-bold"
+            className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-1 rounded-md border border-red-900 transition-all font-bold cursor-pointer relative z-50"
           >
             Clear Data
           </button>
@@ -173,7 +176,11 @@ const App: React.FC = () => {
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
   <button 
-    onClick={onClick}
+    type="button"
+    onClick={(e) => {
+      e.preventDefault();
+      onClick();
+    }}
     className={`flex flex-col items-center gap-1 flex-1 py-2 transition-all ${active ? 'text-yellow-400' : 'text-gray-400 hover:text-white'}`}
   >
     <div className={`p-1 rounded-lg ${active ? 'bg-yellow-400/20' : ''}`}>
