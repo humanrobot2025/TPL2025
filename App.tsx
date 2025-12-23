@@ -8,6 +8,9 @@ import MatchScorer from './components/MatchScorer';
 import TeamCards from './components/TeamCards';
 import RulesBoard from './components/RulesBoard';
 import PointsTable from './components/PointsTable';
+import AdminPage from './components/AdminPage';
+import LiveView from './components/LiveView';
+import AdminUnlockForm from './components/AdminUnlockForm';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'scorer' | 'teams' | 'rules'>('scorer');
@@ -29,6 +32,7 @@ const App: React.FC = () => {
     const updatedHistory = [record, ...matchHistory];
     setMatchHistory(updatedHistory);
     localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
+    try { bcRef.current?.postMessage({ type: 'match-saved', payload: record }); } catch (e) {}
   };
 
   const pointsTable = useMemo(() => {
@@ -113,6 +117,199 @@ const App: React.FC = () => {
     }
   };
 
+  // Simple hash routing: '', '#/admin', '#/live'
+  const [route, setRoute] = useState<'root' | 'admin' | 'live'>(() => {
+    const h = window.location.hash || '';
+    if (h.startsWith('#/admin')) return 'admin';
+    if (h.startsWith('#/live')) return 'live';
+    return 'root';
+  });
+
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash || '';
+      if (h.startsWith('#/admin')) setRoute('admin');
+      else if (h.startsWith('#/live')) setRoute('live');
+      else setRoute('root');
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // Active match read from localStorage (keeps in sync for Live View) + BroadcastChannel
+  const [activeMatch, setActiveMatch] = useState<any | null>(null);
+  const bcRef = React.useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    // setup BroadcastChannel
+    try {
+      bcRef.current = new BroadcastChannel('tpl-live');
+    } catch (e) {
+      bcRef.current = null;
+    }
+
+    const onBC = (ev: MessageEvent) => {
+      const data = ev.data || {};
+      if (!data.type) return;
+      if (data.type === 'active') {
+        setActiveMatch(data.payload);
+      } else if (data.type === 'match-saved') {
+        setMatchHistory(prev => {
+          const updated = [data.payload, ...prev];
+          localStorage.setItem('tpl_match_history', JSON.stringify(updated));
+          return updated;
+        });
+      } else if (data.type === 'clear') {
+        setActiveMatch(null);
+      } else if (data.type === 'matches-updated') {
+        if (Array.isArray(data.payload)) {
+          setMatchHistory(data.payload);
+          localStorage.setItem('tpl_match_history', JSON.stringify(data.payload));
+        }
+      }
+    };
+
+    bcRef.current?.addEventListener('message', onBC as any);
+
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key === 'tpl_active_match') {
+        try {
+          const amRaw = e.newValue;
+          const am = amRaw ? JSON.parse(amRaw) : null;
+          setActiveMatch(am);
+        } catch (err) {
+          setActiveMatch(null);
+        }
+      }
+      if (e.key === 'tpl_match_history') {
+        try {
+          const mh = e.newValue ? JSON.parse(e.newValue) : [];
+          setMatchHistory(mh);
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+
+    // initialise from storage
+    try {
+      const amRaw = localStorage.getItem('tpl_active_match');
+      setActiveMatch(amRaw ? JSON.parse(amRaw) : null);
+    } catch (e) {
+      setActiveMatch(null);
+    }
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
+      try { bcRef.current?.close(); } catch (e) {}
+      bcRef.current = null;
+    };
+  }, []);
+
+  // ADMIN token gating (client-side). Set `VITE_ADMIN_TOKEN` at build time to require a token.
+  // Note: this is client-side only and not cryptographically secure. For real security use a backend.
+  const ADMIN_TOKEN = (import.meta.env.VITE_ADMIN_TOKEN as string) || '';
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    if (!ADMIN_TOKEN) return true; // no token set → open by default for dev
+    try {
+      const hashQuery = (window.location.hash || '').split('?')[1] || '';
+      const params = new URLSearchParams(hashQuery);
+      const key = params.get('key') || params.get('token') || sessionStorage.getItem('tpl_admin_key');
+      return key === ADMIN_TOKEN;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const onHash = () => {
+      // Recompute admin auth when hash changes (so URL token works)
+      if (!ADMIN_TOKEN) { setIsAdminAuthenticated(true); return; }
+      try {
+        const hashQuery = (window.location.hash || '').split('?')[1] || '';
+        const params = new URLSearchParams(hashQuery);
+        const key = params.get('key') || params.get('token') || sessionStorage.getItem('tpl_admin_key');
+        setIsAdminAuthenticated(key === ADMIN_TOKEN);
+      } catch (e) {
+        setIsAdminAuthenticated(false);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const handleAdminUnlock = (key: string) => {
+    if (!ADMIN_TOKEN) { setIsAdminAuthenticated(true); return; }
+    if (key === ADMIN_TOKEN) {
+      try { sessionStorage.setItem('tpl_admin_key', key); } catch (e) {}
+      setIsAdminAuthenticated(true);
+      // Add the token to the URL for easy sharing (optional)
+      if (!window.location.hash.includes('key=')) {
+        const base = window.location.hash.split('?')[0] || '#/admin';
+        window.location.hash = base + '?key=' + encodeURIComponent(key);
+      }
+    } else {
+      alert('Invalid admin key');
+    }
+  };
+
+  const editMatch = (updated: MatchRecord) => {
+    const updatedHistory = matchHistory.map(m => m.id === updated.id ? updated : m);
+    setMatchHistory(updatedHistory);
+    localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
+    try { bcRef.current?.postMessage({ type: 'matches-updated', payload: updatedHistory }); } catch (e) {}
+  };
+
+  const deleteMatch = (id: string) => {
+    const updatedHistory = matchHistory.filter(m => m.id !== id);
+    setMatchHistory(updatedHistory);
+    localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
+    try { bcRef.current?.postMessage({ type: 'matches-updated', payload: updatedHistory }); } catch (e) {}
+  };
+
+  // Publish a saved match as the active (live) snapshot
+  const publishSavedMatch = (m: MatchRecord) => {
+    const parseOvers = (overs: string | undefined) => {
+      if (!overs) return { totalOvers: 0, legalBallsInOver: 0 };
+      const parts = overs.split('.');
+      const whole = parseInt(parts[0] || '0', 10) || 0;
+      const frac = parts[1] ? parseInt(parts[1], 10) || 0 : 0;
+      return { totalOvers: whole, legalBallsInOver: frac };
+    };
+
+    const a = parseOvers(m.oversA);
+    const b = parseOvers(m.oversB);
+
+    const payload = {
+      status: MatchStatus.RESULT,
+      teamA: m.teamA,
+      teamB: m.teamB,
+      runs: m.scoreA || 0,
+      wickets: m.wicketsA || 0,
+      runsB: m.scoreB || 0,
+      wicketsB: m.wicketsB || 0,
+      totalOvers: a.totalOvers,
+      legalBallsInOver: a.legalBallsInOver,
+      ballHistory: [],
+      currentInnings: 1,
+      innings1Score: m.scoreA || 0
+    } as any;
+
+    localStorage.setItem('tpl_active_match', JSON.stringify(payload));
+    try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
+    setActiveMatch(payload);
+  };
+
+  const clearActiveMatch = () => {
+    localStorage.removeItem('tpl_active_match');
+    try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
+    setActiveMatch(null);
+  };
+
   return (
     <div className="min-h-screen stadium-bg text-white pb-20 overflow-x-hidden">
       {/* Header */}
@@ -132,95 +329,139 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          <button 
-            type="button"
-            onClick={resetHistory}
-            className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-1 rounded-md border border-red-900 transition-all font-bold cursor-pointer relative z-50"
-          >
-            Clear Data
-          </button>
+          {route === 'live' ? (
+            <div className="text-[10px] bg-yellow-400/10 text-yellow-400 px-3 py-1 rounded-md border border-yellow-400/20 transition-all font-bold">Public Live Display</div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <a href="#/live" className="text-[10px] bg-white/5 hover:bg-white/10 text-white px-3 py-1 rounded-md border border-white/10 transition-all font-bold">Live View</a>
+              <a href="#/admin" className="text-[10px] bg-yellow-400 hover:bg-yellow-300 text-black px-3 py-1 rounded-md border border-yellow-400 transition-all font-bold">Admin</a>
+              <button 
+                type="button"
+                onClick={resetHistory}
+                className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-1 rounded-md border border-red-900 transition-all font-bold cursor-pointer relative z-50"
+              >
+                Clear Data
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 mt-8">
-        {activeTab === 'scorer' && (
-          <div className="space-y-8 animate-fade-in">
-            <MatchScorer teams={TEAMS} onSaveMatch={handleMatchSave} />
-            <PointsTable rows={pointsTable} />
-            
-            {/* Match History Section */}
-            {matchHistory.length > 0 && (
-              <div className="mt-12 space-y-6">
-                <h3 className="text-2xl font-bebas text-white tracking-widest border-b border-white/10 pb-2">Match History</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  {matchHistory.map((match) => (
-                    <div key={match.id} className="bg-black/40 backdrop-blur-md rounded-2xl border border-white/10 p-5 hover:bg-black/60 transition-all group">
-                      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="flex-1 text-center md:text-left">
-                          <p className={`text-lg font-bebas tracking-wide ${match.winner === match.teamA ? 'text-yellow-400' : 'text-gray-400'}`}>
-                            {match.teamA}
-                          </p>
-                          <p className="text-3xl font-bebas text-white">{match.scoreA}/{match.wicketsA} <span className="text-xs text-gray-500 font-sans">({match.oversA} ov)</span></p>
-                        </div>
-                        
-                        <div className="flex flex-col items-center px-4">
-                          <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest">VS</span>
-                          <span className="bg-white/5 text-[10px] text-gray-400 px-2 py-1 rounded-md mt-1">{match.date}</span>
-                        </div>
+        {route === 'admin' && (
+          isAdminAuthenticated ? (
+            <AdminPage teams={TEAMS} matchHistory={matchHistory} onUpdateMatch={editMatch} onDeleteMatch={deleteMatch} onSetActiveMatch={publishSavedMatch} onClearActiveMatch={clearActiveMatch} />
+          ) : (
+            <div className="max-w-2xl mx-auto px-4 mt-12 space-y-6 text-center">
+              <h2 className="text-2xl font-bebas text-yellow-400">Admin Access Required</h2>
+              <p className="text-gray-300">This page is protected. Append <code className="bg-white/5 px-2 py-1 rounded">?key=YOUR_TOKEN</code> to the URL, or enter your admin token below.</p>
+              <AdminUnlockForm onUnlock={handleAdminUnlock} showExampleLink={!!import.meta.env.VITE_ADMIN_TOKEN} />
+            </div>
+          )
+        )}
 
-                        <div className="flex-1 text-center md:text-right">
-                          <p className={`text-lg font-bebas tracking-wide ${match.winner === match.teamB ? 'text-yellow-400' : 'text-gray-400'}`}>
-                            {match.teamB}
-                          </p>
-                          <p className="text-3xl font-bebas text-white">{match.scoreB}/{match.wicketsB} <span className="text-xs text-gray-500 font-sans">({match.oversB} ov)</span></p>
-                        </div>
-                      </div>
-                      <div className="mt-4 pt-4 border-t border-white/5 text-center">
-                         <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">
-                           Winner: {match.winner === 'Draw' ? "Match Drawn" : match.winner}
-                         </span>
+        {route === 'live' && (
+          <LiveView teams={TEAMS} activeMatch={activeMatch} matchHistory={matchHistory} pointsTable={pointsTable} />
+        )}
+
+        {route === 'root' && (
+          <>
+            {activeTab === 'scorer' && (
+              // If an ADMIN_TOKEN is set and user is not authenticated, show a read-only view
+              (ADMIN_TOKEN && !isAdminAuthenticated) ? (
+                <div className="space-y-8 animate-fade-in">
+                  <div className="max-w-2xl mx-auto text-center">
+                    <h2 className="text-2xl font-bebas text-yellow-400">Public Scoreboard (Read-only)</h2>
+                    <p className="text-gray-300">This area is for administrators to run live scoring. If you are an admin, please <a href="#/admin" className="text-yellow-400 underline">unlock the Admin page</a> to control scoring.</p>
+                    <AdminUnlockForm onUnlock={handleAdminUnlock} />
+                  </div>
+
+                  <LiveView teams={TEAMS} activeMatch={activeMatch} matchHistory={matchHistory} pointsTable={pointsTable} />
+                  <PointsTable rows={pointsTable} />
+                </div>
+              ) : (
+                <div className="space-y-8 animate-fade-in">
+                  <MatchScorer teams={TEAMS} onSaveMatch={handleMatchSave} />
+                  <PointsTable rows={pointsTable} />
+
+                  {/* Match History Section */}
+                  {matchHistory.length > 0 && (
+                    <div className="mt-12 space-y-6">
+                      <h3 className="text-2xl font-bebas text-white tracking-widest border-b border-white/10 pb-2">Match History</h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        {matchHistory.map((match) => (
+                          <div key={match.id} className="bg-black/40 backdrop-blur-md rounded-2xl border border-white/10 p-5 hover:bg-black/60 transition-all group">
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                              <div className="flex-1 text-center md:text-left">
+                                <p className={`text-lg font-bebas tracking-wide ${match.winner === match.teamA ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                  {match.teamA}
+                                </p>
+                                <p className="text-3xl font-bebas text-white">{match.scoreA}/{match.wicketsA} <span className="text-xs text-gray-500 font-sans">({match.oversA} ov)</span></p>
+                              </div>
+                              
+                              <div className="flex flex-col items-center px-4">
+                                <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest">VS</span>
+                                <span className="bg-white/5 text-[10px] text-gray-400 px-2 py-1 rounded-md mt-1">{match.date}</span>
+                              </div>
+
+                              <div className="flex-1 text-center md:text-right">
+                                <p className={`text-lg font-bebas tracking-wide ${match.winner === match.teamB ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                  {match.teamB}
+                                </p>
+                                <p className="text-3xl font-bebas text-white">{match.scoreB}/{match.wicketsB} <span className="text-xs text-gray-500 font-sans">({match.oversB} ov)</span></p>
+                              </div>
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-white/5 text-center">
+                               <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">
+                                 Winner: {match.winner === 'Draw' ? "Match Drawn" : match.winner}
+                               </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
+              )
             )}
-          </div>
-        )}
 
-        {activeTab === 'teams' && (
-          <TeamCards teams={TEAMS} />
-        )}
+            {activeTab === 'teams' && (
+              <TeamCards teams={TEAMS} />
+            )}
 
-        {activeTab === 'rules' && (
-          <RulesBoard rules={TOURNAMENT_RULES} />
+            {activeTab === 'rules' && (
+              <RulesBoard rules={TOURNAMENT_RULES} />
+            )}
+          </>
         )}
       </main>
 
       {/* Bottom Tabs Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/10 px-4 py-2 z-50">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <TabButton 
-            active={activeTab === 'scorer'} 
-            onClick={() => setActiveTab('scorer')} 
-            icon={<TrophyIcon />} 
-            label="Live Scorer" 
-          />
-          <TabButton 
-            active={activeTab === 'teams'} 
-            onClick={() => setActiveTab('teams')} 
-            icon={<UsersIcon />} 
-            label="Teams" 
-          />
-          <TabButton 
-            active={activeTab === 'rules'} 
-            onClick={() => setActiveTab('rules')} 
-            icon={<DocumentTextIcon />} 
-            label="Rules" 
-          />
-        </div>
-      </nav>
+      {route !== 'live' && (
+        <nav className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/10 px-4 py-2 z-50">
+          <div className="max-w-4xl mx-auto flex justify-between items-center">
+            <TabButton 
+              active={activeTab === 'scorer'} 
+              onClick={() => setActiveTab('scorer')} 
+              icon={<TrophyIcon />} 
+              label="Live Scorer" 
+            />
+            <TabButton 
+              active={activeTab === 'teams'} 
+              onClick={() => setActiveTab('teams')} 
+              icon={<UsersIcon />} 
+              label="Teams" 
+            />
+            <TabButton 
+              active={activeTab === 'rules'} 
+              onClick={() => setActiveTab('rules')} 
+              icon={<DocumentTextIcon />} 
+              label="Rules" 
+            />
+          </div>
+        </nav>
+      )}
     </div>
   );
 };

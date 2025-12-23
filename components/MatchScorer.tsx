@@ -41,44 +41,66 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
 
   const isInvalidSetup = teamAIdx === teamBIdx;
 
-  // Local state persistence
-  useEffect(() => {
-    const activeMatch = localStorage.getItem('tpl_active_match');
-    if (activeMatch) {
-      try {
-        const parsed = JSON.parse(activeMatch);
-        setStatus(parsed.status);
-        setTeamAIdx(parsed.teamAIdx);
-        setTeamBIdx(parsed.teamBIdx);
-        setMatchOvers(parsed.matchOvers || 5);
-        setCurrentInnings(parsed.currentInnings || 1);
-        setRuns(parsed.runs || 0);
-        setWickets(parsed.wickets || 0);
-        setLegalBallsInOver(parsed.legalBallsInOver || 0);
-        setTotalOvers(parsed.totalOvers || 0);
-        setBallHistory(parsed.ballHistory || []);
-        setStriker(parsed.striker || '');
-        setNonStriker(parsed.nonStriker || '');
-        setCurrentBowler(parsed.currentBowler || '');
-        setDismissedPlayers(parsed.dismissedPlayers || []);
-        setMatchPlayerStats(parsed.matchPlayerStats || {});
-        setInnings1Score(parsed.innings1Score || 0);
-        setInnings1Wickets(parsed.innings1Wickets || 0);
-        setInnings1Overs(parsed.innings1Overs || '0.0');
-        setWinner(parsed.winner || '');
-      } catch (e) {
-        console.error("Failed to load active match", e);
-      }
+  // Local state persistence + BroadcastChannel for real-time updates
+  const bcRef = React.useRef<BroadcastChannel | null>(null);
+
+  React.useEffect(() => {
+    // set up BroadcastChannel for cross-tab realtime updates
+    try {
+      bcRef.current = new BroadcastChannel('tpl-live');
+    } catch (e) {
+      bcRef.current = null;
     }
+
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key === 'tpl_active_match') {
+        try {
+          const parsed = e.newValue ? JSON.parse(e.newValue) : null;
+          if (parsed) {
+            setStatus(parsed.status);
+            setTeamAIdx(parsed.teamAIdx);
+            setTeamBIdx(parsed.teamBIdx);
+            setMatchOvers(parsed.matchOvers || 5);
+            setCurrentInnings(parsed.currentInnings || 1);
+            setRuns(parsed.runs || 0);
+            setWickets(parsed.wickets || 0);
+            setLegalBallsInOver(parsed.legalBallsInOver || 0);
+            setTotalOvers(parsed.totalOvers || 0);
+            setBallHistory(parsed.ballHistory || []);
+            setStriker(parsed.striker || '');
+            setNonStriker(parsed.nonStriker || '');
+            setCurrentBowler(parsed.currentBowler || '');
+            setDismissedPlayers(parsed.dismissedPlayers || []);
+            setMatchPlayerStats(parsed.matchPlayerStats || {});
+            setInnings1Score(parsed.innings1Score || 0);
+            setInnings1Wickets(parsed.innings1Wickets || 0);
+            setInnings1Overs(parsed.innings1Overs || '0.0');
+            setWinner(parsed.winner || '');
+          }
+        } catch (err) {
+          console.error('Failed to parse active match from storage event', err);
+        }
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      try { bcRef.current?.close(); } catch (e) {}
+    };
   }, []);
 
   useEffect(() => {
     if (status !== MatchStatus.SETUP) {
-      localStorage.setItem('tpl_active_match', JSON.stringify({
+      const payload = {
         status, teamAIdx, teamBIdx, matchOvers, currentInnings, runs, wickets, legalBallsInOver, totalOvers,
         ballHistory, striker, nonStriker, currentBowler, dismissedPlayers, matchPlayerStats,
         innings1Score, innings1Wickets, innings1Overs, winner
-      }));
+      };
+      localStorage.setItem('tpl_active_match', JSON.stringify(payload));
+      try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
     }
   }, [status, teamAIdx, teamBIdx, matchOvers, currentInnings, runs, wickets, legalBallsInOver, totalOvers, 
       ballHistory, striker, nonStriker, currentBowler, dismissedPlayers, matchPlayerStats,
@@ -108,6 +130,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
     setWinner('');
     setShowFullScorecard(false);
     localStorage.removeItem('tpl_active_match');
+    try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
   };
 
   const goToSetup = (e: React.MouseEvent) => {
@@ -281,6 +304,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       };
 
       onSaveMatch(record);
+      try { bcRef.current?.postMessage({ type: 'match-saved', payload: record }); } catch (e) {}
       setLastSavedRecord(record);
       setStatus(MatchStatus.RESULT);
     }
