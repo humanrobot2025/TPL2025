@@ -1,0 +1,5 @@
+{
+  "name": "Treasury Premier League (TPL) Scorer",
+  "description": "A fun, animated cricket tournament dashboard for the Treasury department, featuring a live run counter, points table, team lists, and rules.",
+  "requestFramePermissions": []
+}
