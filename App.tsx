@@ -507,31 +507,40 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Bottom Tabs Navigation */}
-      {route !== 'live' && (
+      {/* Bottom Tabs Navigation - always visible */}
         <nav className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/10 px-4 py-2 z-50">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
             <TabButton 
-              active={activeTab === 'scorer'} 
-              onClick={() => setActiveTab('scorer')} 
+              active={route === 'live' || (route === 'root' && activeTab === 'scorer')} 
+              onClick={() => {
+                // Live: navigate to public live view
+                window.location.hash = '#/live';
+                setActiveTab('scorer');
+              }}
               icon={<TrophyIcon />} 
-              label="Live Scorer" 
+              label="Live" 
             />
             <TabButton 
-              active={activeTab === 'teams'} 
-              onClick={() => setActiveTab('teams')} 
+              active={route !== 'live' && activeTab === 'teams'} 
+              onClick={() => {
+                setActiveTab('teams');
+                // ensure route shows root content
+                window.location.hash = '';
+              }} 
               icon={<UsersIcon />} 
               label="Teams" 
             />
             <TabButton 
-              active={activeTab === 'rules'} 
-              onClick={() => setActiveTab('rules')} 
+              active={route !== 'live' && activeTab === 'rules'} 
+              onClick={() => {
+                setActiveTab('rules');
+                window.location.hash = '';
+              }}
               icon={<DocumentTextIcon />} 
               label="Rules" 
             />
           </div>
         </nav>
-      )}
     </div>
   );
 };
