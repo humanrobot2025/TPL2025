@@ -34,11 +34,12 @@ export function listen(handler: (evt: string, payload: any) => void) {
   if (!base || typeof EventSource === 'undefined') return { close: () => {} };
   const es = new EventSource(`${base}/events`);
   es.addEventListener('init', (ev: any) => {
-    try { handler('init', JSON.parse(ev.data)); } catch (e) {}
+    try { handler('init', JSON.parse(ev.data)); handler('sse-status', { connected: true }); } catch (e) {}
   });
-  es.addEventListener('active', (ev: any) => { try { handler('active', JSON.parse(ev.data)); } catch (e) {} });
-  es.addEventListener('clear', (ev: any) => { try { handler('clear', JSON.parse(ev.data)); } catch (e) {} });
-  es.addEventListener('matches-updated', (ev: any) => { try { handler('matches-updated', JSON.parse(ev.data)); } catch (e) {} });
-  es.onerror = () => {}; // silent error
+  es.addEventListener('active', (ev: any) => { try { handler('active', JSON.parse(ev.data)); handler('sse-status', { connected: true }); } catch (e) {} });
+  es.addEventListener('clear', (ev: any) => { try { handler('clear', JSON.parse(ev.data)); handler('sse-status', { connected: true }); } catch (e) {} });
+  es.addEventListener('matches-updated', (ev: any) => { try { handler('matches-updated', JSON.parse(ev.data)); handler('sse-status', { connected: true }); } catch (e) {} });
+  es.onopen = () => { try { handler('sse-status', { connected: true }); } catch (e) {} };
+  es.onerror = () => { try { handler('sse-status', { connected: false }); } catch (e) {} };
   return { close: () => es.close() };
 }

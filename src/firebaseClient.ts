@@ -62,12 +62,14 @@ export async function getActiveFirebase() {
   }
 }
 
-export function listenActiveFirebase(handler: (payload: any | null) => void) {
+export function listenActiveFirebase(handler: (payload: any | null) => void, statusHandler?: (connected: boolean) => void) {
   const ok = init(); if (!ok) return { close: () => {} };
   const ACTIVE_DOC = doc(db!, 'live', 'active');
+  // onSnapshot returns an unsubscribe function
   const unsub = onSnapshot(ACTIVE_DOC, (snap) => {
+    try { statusHandler && statusHandler(true); } catch (e) {}
     if (!snap.exists()) handler(null);
     else handler(snap.data());
-  }, (err) => { console.warn('Firestore snapshot error', err); });
+  }, (err) => { console.warn('Firestore snapshot error', err); try { statusHandler && statusHandler(false); } catch (e) {} });
   return { close: unsub } as any;
 }

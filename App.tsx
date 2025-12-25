@@ -145,6 +145,8 @@ const App: React.FC = () => {
 
   // Active match read from localStorage (keeps in sync for Live View) + BroadcastChannel
   const [activeMatch, setActiveMatch] = useState<any | null>(null);
+  const [sseConnected, setSseConnected] = useState<boolean | null>(null);
+  const [firebaseConnected, setFirebaseConnected] = useState<boolean | null>(null);
   const bcRef = React.useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
@@ -166,6 +168,7 @@ const App: React.FC = () => {
             if (evt === 'init' || evt === 'active') setActiveMatch(payload.active ?? payload);
             else if (evt === 'clear') setActiveMatch(null);
             else if (evt === 'matches-updated' && Array.isArray(payload)) { setMatchHistory(payload); localStorage.setItem('tpl_match_history', JSON.stringify(payload)); }
+            else if (evt === 'sse-status' && payload && typeof payload.connected === 'boolean') { setSseConnected(payload.connected); }
           } catch (err) {}
         });
         // initial fetch
@@ -182,6 +185,8 @@ const App: React.FC = () => {
             if (payload) setActiveMatch(payload);
             else setActiveMatch(null);
           } catch (err) {}
+        }, (connected: boolean) => {
+          setFirebaseConnected(connected);
         });
         try { const initial = await fb.getActiveFirebase(); if (initial) setActiveMatch(initial); } catch (e) {}
       }

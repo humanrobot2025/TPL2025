@@ -89,7 +89,32 @@ Setup steps:
 4. Once configured, the admin scorer will write the active match to Firestore at `live/active` and all connected clients will automatically receive updates.
 
 Notes:
-- Firestore requires a secure write path for production — for testing you can allow open writes or add a simple admin server to sign requests.
+- Firestore requires a secure write path for production — for testing you can allow open reads and writes, but **do not** keep it open for production.
+
+  Example Firestore rules (allow reads public, writes only for `admin` custom claim):
+
+  ```
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /live/{doc} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.token.admin == true;
+      }
+    }
+  }
+  ```
+
+- To set the `admin` custom claim for a user do the following:
+  1. Create a Firebase service account JSON and set `GOOGLE_APPLICATION_CREDENTIALS` to its path.
+  2. Run the helper script provided in `scripts/setAdminClaim.js`:
+
+     ```bash
+     GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccount.json node scripts/setAdminClaim.js admin@example.com
+     ```
+
+  This will set `admin: true` for the specified user and allow them to sign in and perform admin writes.
+
 - The Firestore approach avoids running an SSE server and works across devices and networks (recommended for small teams).
 
 

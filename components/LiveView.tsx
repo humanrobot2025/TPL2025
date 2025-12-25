@@ -7,9 +7,11 @@ interface LiveViewProps {
   activeMatch: any | null; // structure from tpl_active_match
   matchHistory: MatchRecord[];
   pointsTable: PointsTableRow[];
+  sseConnected?: boolean | null;
+  firebaseConnected?: boolean | null;
 }
 
-const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, pointsTable }) => {
+const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, pointsTable, sseConnected, firebaseConnected }) => {
   const teamName = (side: 'A' | 'B') => {
     if (!activeMatch) return '';
     if (side === 'A') {
@@ -111,7 +113,17 @@ const LiveView: React.FC<LiveViewProps> = ({ teams, activeMatch, matchHistory, p
     <div className="max-w-4xl mx-auto px-4 mt-8 space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bebas text-yellow-400">Live Scores</h2>
-        <div className="text-sm text-gray-400">Read-only public scoreboard (no controls)</div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-400">Read-only public scoreboard (no controls)</div>
+          <div className="text-xs flex items-center gap-2">
+            {typeof sseConnected === 'boolean' && (
+              <div className={`px-2 py-1 rounded text-white ${sseConnected ? 'bg-green-600' : 'bg-red-600'}`} title={`SSE ${sseConnected ? 'connected' : 'disconnected'}`}>SSE</div>
+            )}
+            {typeof firebaseConnected === 'boolean' && (
+              <div className={`px-2 py-1 rounded text-white ${firebaseConnected ? 'bg-green-600' : 'bg-red-600'}`} title={`Firestore ${firebaseConnected ? 'connected' : 'disconnected'}`}>Firestore</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {activeMatch ? (
