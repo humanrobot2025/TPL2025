@@ -155,6 +155,23 @@ const App: React.FC = () => {
       bcRef.current = null;
     }
 
+    // SSE-based cross-device sync (best-effort)
+    let sseRef: { close?: () => void } | null = null;
+    try {
+      const { listen, getActive } = await import('./src/liveSync').catch(() => ({}));
+      if (listen) {
+        sseRef = listen((evt, payload) => {
+          try {
+            if (evt === 'init' || evt === 'active') setActiveMatch(payload.active ?? payload);
+            else if (evt === 'clear') setActiveMatch(null);
+            else if (evt === 'matches-updated' && Array.isArray(payload)) { setMatchHistory(payload); localStorage.setItem('tpl_match_history', JSON.stringify(payload)); }
+          } catch (err) {}
+        });
+        // initial fetch
+        try { const initial = await getActive(); if (initial) setActiveMatch(initial); } catch (e) {}
+      }
+    } catch (e) {}
+
     const onBC = (ev: MessageEvent) => {
       const data = ev.data || {};
       if (!data.type) return;
@@ -228,6 +245,14 @@ const App: React.FC = () => {
       }
     }, 800);
 
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
+      try { bcRef.current?.close(); } catch (e) {}
+      bcRef.current = null;
+      try { sseRef?.close && sseRef.close(); } catch (e) {}
+      clearInterval(pollInterval);
+    };
     return () => {
       window.removeEventListener('storage', onStorage);
       try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
@@ -329,12 +354,31 @@ const App: React.FC = () => {
     localStorage.setItem('tpl_active_match', JSON.stringify(payload));
     try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
     setActiveMatch(payload);
+
+    // send to SSE server if available
+    (async () => {
+      try {
+        const mod = await import('./src/liveSync').catch(() => ({}));
+        if (mod && mod.sendActive) await mod.sendActive(payload);
+      } catch (e) {
+        console.warn('Failed to send active to SSE server', e);
+      }
+    })();
   };
 
   const clearActiveMatch = () => {
     localStorage.removeItem('tpl_active_match');
     try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
     setActiveMatch(null);
+
+    (async () => {
+      try {
+        const mod = await import('./src/liveSync').catch(() => ({}));
+        if (mod && mod.clearActive) await mod.clearActive();
+      } catch (e) {
+        console.warn('Failed to clear active on SSE server', e);
+      }
+    })();
   };
 
   // Start a fresh tournament: clear history and active match, set a flag

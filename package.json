@@ -6,12 +6,15 @@
   "homepage": "https://humanrobot2025.github.io/TPL2025",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "express": "^4.18.4",
+    "cors": "^2.8.5",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },

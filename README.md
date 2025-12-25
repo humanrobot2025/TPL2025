@@ -47,6 +47,26 @@ Open these routes in your browser after running `npm run dev` or when the app is
 
 Note: the Live view updates in real-time across tabs using BroadcastChannel (and falls back to the `storage` event), so viewers do not need to refresh the page to see score updates.
 
+### Cross-device Live View (SSE server)
+
+To enable live updates across devices (admin on one device, multiple viewers on other devices), a small Server-Sent Events (SSE) server is included in `/server`.
+
+- Start the SSE server:
+
+  `npm run dev:server`
+
+  (server listens on port 4000 by default)
+
+- Configure the app to use the SSE server by setting `VITE_SSE_URL` when running the dev server, for example:
+
+  `VITE_SSE_URL="http://localhost:4000" npm run dev`
+
+- How it works:
+  - Admin (scorer) sends active match updates to the SSE server (POST /active) and clears it with DELETE /active.
+  - Viewer clients connect to `/events` with EventSource and receive `active` and `clear` events in real time.
+
+Note: The SSE server stores the latest active match in-memory; restart will clear it. This keeps the implementation intentionally minimal for local testing or small deployments.
+
 ---
 
 ## Admin token (optional)

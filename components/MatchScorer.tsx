@@ -115,6 +115,16 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       };
       localStorage.setItem('tpl_active_match', JSON.stringify(payload));
       try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
+
+      // Also send to SSE server if configured
+      (async () => {
+        try {
+          const mod = await import('../src/liveSync').catch(() => ({}));
+          if (mod && mod.sendActive) await mod.sendActive(payload);
+        } catch (e) {
+          console.warn('Failed to notify SSE server', e);
+        }
+      })();
     }
   }, [status, teamAIdx, teamBIdx, matchOvers, currentInnings, runs, wickets, legalBallsInOver, totalOvers, 
       ballHistory, striker, nonStriker, currentBowler, dismissedPlayers, matchPlayerStats,
@@ -145,6 +155,15 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
     setShowFullScorecard(false);
     localStorage.removeItem('tpl_active_match');
     try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
+
+    (async () => {
+      try {
+        const mod = await import('../src/liveSync').catch(() => ({}));
+        if (mod && mod.clearActive) await mod.clearActive();
+      } catch (err) {
+        console.warn('Failed to clear SSE server active match', err);
+      }
+    })();
   };
 
   const goToSetup = (e: React.MouseEvent) => {
