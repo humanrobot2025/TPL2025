@@ -67,6 +67,32 @@ To enable live updates across devices (admin on one device, multiple viewers on 
 
 Note: The SSE server stores the latest active match in-memory; restart will clear it. This keeps the implementation intentionally minimal for local testing or small deployments.
 
+### Firebase (Firestore) realtime option
+
+If you prefer a managed realtime backend (so you don't need to run your own SSE server), you can use Firebase Firestore. The app will listen to a document in Firestore and receive updates in near real-time.
+
+Setup steps:
+1. Create a Firebase project at https://console.firebase.google.com/ and enable Firestore (Native mode).
+2. Add a Web app to your project (Register app) and copy the config values (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId).
+3. Set these as environment variables when running the dev server (or build):
+
+   ```bash
+   VITE_FIREBASE_API_KEY="..."
+   VITE_FIREBASE_AUTH_DOMAIN="..."
+   VITE_FIREBASE_PROJECT_ID="..."
+   VITE_FIREBASE_STORAGE_BUCKET="..."
+   VITE_FIREBASE_MESSAGING_SENDER_ID="..."
+   VITE_FIREBASE_APP_ID="..."
+   npm run dev -- --host
+   ```
+
+4. Once configured, the admin scorer will write the active match to Firestore at `live/active` and all connected clients will automatically receive updates.
+
+Notes:
+- Firestore requires a secure write path for production — for testing you can allow open writes or add a simple admin server to sign requests.
+- The Firestore approach avoids running an SSE server and works across devices and networks (recommended for small teams).
+
+
 ---
 
 ## Admin token (optional)

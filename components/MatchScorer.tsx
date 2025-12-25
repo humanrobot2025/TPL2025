@@ -116,13 +116,22 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       localStorage.setItem('tpl_active_match', JSON.stringify(payload));
       try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
 
-      // Also send to SSE server if configured
+      // Also send to SSE server and Firestore if configured
       (async () => {
         try {
           const mod = await import('../src/liveSync').catch(() => ({}));
           if (mod && mod.sendActive) await mod.sendActive(payload);
         } catch (e) {
           console.warn('Failed to notify SSE server', e);
+        }
+      })();
+
+      (async () => {
+        try {
+          const fb = await import('../src/firebaseClient').catch(() => ({}));
+          if (fb && fb.setActiveFirebase) await fb.setActiveFirebase(payload);
+        } catch (e) {
+          console.warn('Failed to notify Firestore', e);
         }
       })();
     }
@@ -162,6 +171,15 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
         if (mod && mod.clearActive) await mod.clearActive();
       } catch (err) {
         console.warn('Failed to clear SSE server active match', err);
+      }
+    })();
+
+    (async () => {
+      try {
+        const fb = await import('../src/firebaseClient').catch(() => ({}));
+        if (fb && fb.clearActiveFirebase) await fb.clearActiveFirebase();
+      } catch (err) {
+        console.warn('Failed to clear Firestore active match', err);
       }
     })();
   };

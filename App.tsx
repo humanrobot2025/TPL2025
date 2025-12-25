@@ -157,6 +157,7 @@ const App: React.FC = () => {
 
     // SSE-based cross-device sync (best-effort)
     let sseRef: { close?: () => void } | null = null;
+    let firebaseRef: { close?: () => void } | null = null;
     try {
       const { listen, getActive } = await import('./src/liveSync').catch(() => ({}));
       if (listen) {
@@ -171,6 +172,21 @@ const App: React.FC = () => {
         try { const initial = await getActive(); if (initial) setActiveMatch(initial); } catch (e) {}
       }
     } catch (e) {}
+
+    // Firestore-based cross-device sync (best-effort when configured)
+    try {
+      const fb = await import('./src/firebaseClient').catch(() => ({}));
+      if (fb && fb.listenActiveFirebase) {
+        firebaseRef = fb.listenActiveFirebase((payload: any) => {
+          try {
+            if (payload) setActiveMatch(payload);
+            else setActiveMatch(null);
+          } catch (err) {}
+        });
+        try { const initial = await fb.getActiveFirebase(); if (initial) setActiveMatch(initial); } catch (e) {}
+      }
+    } catch (e) {}
+
 
     const onBC = (ev: MessageEvent) => {
       const data = ev.data || {};
@@ -251,13 +267,7 @@ const App: React.FC = () => {
       try { bcRef.current?.close(); } catch (e) {}
       bcRef.current = null;
       try { sseRef?.close && sseRef.close(); } catch (e) {}
-      clearInterval(pollInterval);
-    };
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
-      try { bcRef.current?.close(); } catch (e) {}
-      bcRef.current = null;
+      try { firebaseRef?.close && firebaseRef.close(); } catch (e) {}
       clearInterval(pollInterval);
     };
   }, [activeMatch]);
@@ -364,6 +374,16 @@ const App: React.FC = () => {
         console.warn('Failed to send active to SSE server', e);
       }
     })();
+
+    // send to Firestore if available
+    (async () => {
+      try {
+        const fb = await import('./src/firebaseClient').catch(() => ({}));
+        if (fb && fb.setActiveFirebase) await fb.setActiveFirebase(payload);
+      } catch (e) {
+        console.warn('Failed to send active to Firestore', e);
+      }
+    })();
   };
 
   const clearActiveMatch = () => {
@@ -377,6 +397,15 @@ const App: React.FC = () => {
         if (mod && mod.clearActive) await mod.clearActive();
       } catch (e) {
         console.warn('Failed to clear active on SSE server', e);
+      }
+    })();
+
+    (async () => {
+      try {
+        const fb = await import('./src/firebaseClient').catch(() => ({}));
+        if (fb && fb.clearActiveFirebase) await fb.clearActiveFirebase();
+      } catch (e) {
+        console.warn('Failed to clear active on Firestore', e);
       }
     })();
   };
