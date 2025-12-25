@@ -42,7 +42,7 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
   const isInvalidSetup = teamAIdx === teamBIdx;
 
   // Local state persistence + BroadcastChannel for real-time updates
-  const bcRef = React.useRef<BroadcastChannel | null>(null);
+
 
   React.useEffect(() => {
     // Check for a setup preset (e.g., from Admin -> Start Match)
@@ -58,52 +58,6 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
     } catch (err) {
       // ignore
     }
-
-    // set up BroadcastChannel for cross-tab realtime updates
-    try {
-      bcRef.current = new BroadcastChannel('tpl-live');
-    } catch (e) {
-      bcRef.current = null;
-    }
-
-    const onStorage = (e: StorageEvent) => {
-      if (!e.key) return;
-      if (e.key === 'tpl_active_match') {
-        try {
-          const parsed = e.newValue ? JSON.parse(e.newValue) : null;
-          if (parsed) {
-            setStatus(parsed.status);
-            setTeamAIdx(parsed.teamAIdx);
-            setTeamBIdx(parsed.teamBIdx);
-            setMatchOvers(parsed.matchOvers || 5);
-            setCurrentInnings(parsed.currentInnings || 1);
-            setRuns(parsed.runs || 0);
-            setWickets(parsed.wickets || 0);
-            setLegalBallsInOver(parsed.legalBallsInOver || 0);
-            setTotalOvers(parsed.totalOvers || 0);
-            setBallHistory(parsed.ballHistory || []);
-            setStriker(parsed.striker || '');
-            setNonStriker(parsed.nonStriker || '');
-            setCurrentBowler(parsed.currentBowler || '');
-            setDismissedPlayers(parsed.dismissedPlayers || []);
-            setMatchPlayerStats(parsed.matchPlayerStats || {});
-            setInnings1Score(parsed.innings1Score || 0);
-            setInnings1Wickets(parsed.innings1Wickets || 0);
-            setInnings1Overs(parsed.innings1Overs || '0.0');
-            setWinner(parsed.winner || '');
-          }
-        } catch (err) {
-          console.error('Failed to parse active match from storage event', err);
-        }
-      }
-    };
-
-    window.addEventListener('storage', onStorage);
-
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      try { bcRef.current?.close(); } catch (e) {}
-    };
   }, []);
 
   useEffect(() => {
@@ -113,23 +67,11 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
         ballHistory, striker, nonStriker, currentBowler, dismissedPlayers, matchPlayerStats,
         innings1Score, innings1Wickets, innings1Overs, winner
       };
-      localStorage.setItem('tpl_active_match', JSON.stringify(payload));
-      try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
-
-      // Also send to SSE server and Firestore if configured
-      (async () => {
-        try {
-          const mod = await import('../src/liveSync').catch(() => ({}));
-          if (mod && mod.sendActive) await mod.sendActive(payload);
-        } catch (e) {
-          console.warn('Failed to notify SSE server', e);
-        }
-      })();
 
       (async () => {
         try {
-          const fb = await import('../src/firebaseClient').catch(() => ({}));
-          if (fb && fb.setActiveFirebase) await fb.setActiveFirebase(payload);
+          const fb = await import('../src/firebaseClient');
+          await fb.setActiveFirebase(payload);
         } catch (e) {
           console.warn('Failed to notify Firestore', e);
         }
@@ -162,22 +104,11 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
     setCurrentInnings(1);
     setWinner('');
     setShowFullScorecard(false);
-    localStorage.removeItem('tpl_active_match');
-    try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
-
+    
     (async () => {
       try {
-        const mod = await import('../src/liveSync').catch(() => ({}));
-        if (mod && mod.clearActive) await mod.clearActive();
-      } catch (err) {
-        console.warn('Failed to clear SSE server active match', err);
-      }
-    })();
-
-    (async () => {
-      try {
-        const fb = await import('../src/firebaseClient').catch(() => ({}));
-        if (fb && fb.clearActiveFirebase) await fb.clearActiveFirebase();
+        const fb = await import('../src/firebaseClient');
+        await fb.clearActiveFirebase();
       } catch (err) {
         console.warn('Failed to clear Firestore active match', err);
       }
@@ -355,7 +286,6 @@ const MatchScorer: React.FC<MatchScorerProps> = ({ teams, onSaveMatch }) => {
       };
 
       onSaveMatch(record);
-      try { bcRef.current?.postMessage({ type: 'match-saved', payload: record }); } catch (e) {}
       setLastSavedRecord(record);
       setStatus(MatchStatus.RESULT);
     }

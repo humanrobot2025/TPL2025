@@ -34,7 +34,7 @@ const App: React.FC = () => {
     const updatedHistory = [record, ...matchHistory];
     setMatchHistory(updatedHistory);
     localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
-    try { bcRef.current?.postMessage({ type: 'match-saved', payload: record }); } catch (e) {}
+
   };
 
   const pointsTable = useMemo(() => {
@@ -145,137 +145,39 @@ const App: React.FC = () => {
 
   // Active match read from localStorage (keeps in sync for Live View) + BroadcastChannel
   const [activeMatch, setActiveMatch] = useState<any | null>(null);
-  const [sseConnected, setSseConnected] = useState<boolean | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean | null>(null);
-  const bcRef = React.useRef<BroadcastChannel | null>(null);
+
 
   useEffect(() => {
-    // setup BroadcastChannel (best-effort)
-    try {
-      bcRef.current = new BroadcastChannel('tpl-live');
-    } catch (e) {
-      bcRef.current = null;
-    }
-
-    // SSE-based cross-device sync (best-effort)
-    let sseRef: { close?: () => void } | null = null;
-    let firebaseRef: { close?: () => void } | null = null;
-    try {
-      const { listen, getActive } = await import('./src/liveSync').catch(() => ({}));
-      if (listen) {
-        sseRef = listen((evt, payload) => {
-          try {
-            if (evt === 'init' || evt === 'active') setActiveMatch(payload.active ?? payload);
-            else if (evt === 'clear') setActiveMatch(null);
-            else if (evt === 'matches-updated' && Array.isArray(payload)) { setMatchHistory(payload); localStorage.setItem('tpl_match_history', JSON.stringify(payload)); }
-            else if (evt === 'sse-status' && payload && typeof payload.connected === 'boolean') { setSseConnected(payload.connected); }
-          } catch (err) {}
-        });
-        // initial fetch
-        try { const initial = await getActive(); if (initial) setActiveMatch(initial); } catch (e) {}
-      }
-    } catch (e) {}
-
-    // Firestore-based cross-device sync (best-effort when configured)
-    try {
-      const fb = await import('./src/firebaseClient').catch(() => ({}));
-      if (fb && fb.listenActiveFirebase) {
+    // Firestore-based cross-device sync
+    let firebaseRef: { close: () => void } | null = null;
+    
+    const initFirebaseSync = async () => {
+      try {
+        const fb = await import('./src/firebaseClient');
+        // Initial fetch
+        const initial = await fb.getActiveFirebase();
+        if (initial) {
+          setActiveMatch(initial);
+        }
+        // Listen for changes
         firebaseRef = fb.listenActiveFirebase((payload: any) => {
-          try {
-            if (payload) setActiveMatch(payload);
-            else setActiveMatch(null);
-          } catch (err) {}
+          setActiveMatch(payload);
         }, (connected: boolean) => {
           setFirebaseConnected(connected);
         });
-        try { const initial = await fb.getActiveFirebase(); if (initial) setActiveMatch(initial); } catch (e) {}
-      }
-    } catch (e) {}
-
-
-    const onBC = (ev: MessageEvent) => {
-      const data = ev.data || {};
-      if (!data.type) return;
-      try {
-        if (data.type === 'active') {
-          setActiveMatch(data.payload);
-        } else if (data.type === 'match-saved') {
-          setMatchHistory(prev => {
-            const updated = [data.payload, ...prev];
-            localStorage.setItem('tpl_match_history', JSON.stringify(updated));
-            return updated;
-          });
-        } else if (data.type === 'clear') {
-          setActiveMatch(null);
-        } else if (data.type === 'matches-updated') {
-          if (Array.isArray(data.payload)) {
-            setMatchHistory(data.payload);
-            localStorage.setItem('tpl_match_history', JSON.stringify(data.payload));
-          }
-        }
       } catch (err) {
-        console.error('Failed handling BC message', err);
+        console.warn('Failed to initialize Firebase sync', err);
+        setFirebaseConnected(false);
       }
     };
 
-    bcRef.current?.addEventListener('message', onBC as any);
-
-    const onStorage = (e: StorageEvent) => {
-      if (!e.key) return;
-      try {
-        if (e.key === 'tpl_active_match') {
-          const amRaw = e.newValue;
-          const am = amRaw ? JSON.parse(amRaw) : null;
-          setActiveMatch(am);
-        }
-        if (e.key === 'tpl_match_history') {
-          const mh = e.newValue ? JSON.parse(e.newValue) : [];
-          setMatchHistory(mh);
-        }
-      } catch (err) {
-        // ignore parse errors
-      }
-    };
-
-    window.addEventListener('storage', onStorage);
-
-    // initialise from storage
-    try {
-      const amRaw = localStorage.getItem('tpl_active_match');
-      setActiveMatch(amRaw ? JSON.parse(amRaw) : null);
-    } catch (e) {
-      setActiveMatch(null);
-    }
-
-    // Poll as a last-resort fallback for environments where BroadcastChannel/storage events aren't reliable
-    const pollInterval = setInterval(() => {
-      try {
-        const raw = localStorage.getItem('tpl_active_match');
-        if (!raw) {
-          if (activeMatch !== null) setActiveMatch(null);
-          return;
-        }
-        const parsed = JSON.parse(raw);
-        // quick shallow compare by stringifying (cheap but reliable for our payloads)
-        const currentRaw = activeMatch ? JSON.stringify(activeMatch) : null;
-        if (currentRaw !== raw) {
-          setActiveMatch(parsed);
-        }
-      } catch (err) {
-        // ignore
-      }
-    }, 800);
+    initFirebaseSync();
 
     return () => {
-      window.removeEventListener('storage', onStorage);
-      try { bcRef.current?.removeEventListener('message', onBC as any); } catch (e) {}
-      try { bcRef.current?.close(); } catch (e) {}
-      bcRef.current = null;
-      try { sseRef?.close && sseRef.close(); } catch (e) {}
-      try { firebaseRef?.close && firebaseRef.close(); } catch (e) {}
-      clearInterval(pollInterval);
+      firebaseRef?.close();
     };
-  }, [activeMatch]);
+  }, []);
 
   // ADMIN token gating (client-side). Set `VITE_ADMIN_TOKEN` at build time to require a token.
   // Note: this is client-side only and not cryptographically secure. For real security use a backend.
@@ -328,107 +230,96 @@ const App: React.FC = () => {
     const updatedHistory = matchHistory.map(m => m.id === updated.id ? updated : m);
     setMatchHistory(updatedHistory);
     localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
-    try { bcRef.current?.postMessage({ type: 'matches-updated', payload: updatedHistory }); } catch (e) {}
+
   };
 
   const deleteMatch = (id: string) => {
     const updatedHistory = matchHistory.filter(m => m.id !== id);
     setMatchHistory(updatedHistory);
     localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
-    try { bcRef.current?.postMessage({ type: 'matches-updated', payload: updatedHistory }); } catch (e) {}
+
   };
 
   // Publish a saved match as the active (live) snapshot
-  const publishSavedMatch = (m: MatchRecord) => {
-    const parseOvers = (overs: string | undefined) => {
-      if (!overs) return { totalOvers: 0, legalBallsInOver: 0 };
-      const parts = overs.split('.');
-      const whole = parseInt(parts[0] || '0', 10) || 0;
-      const frac = parts[1] ? parseInt(parts[1], 10) || 0 : 0;
-      return { totalOvers: whole, legalBallsInOver: frac };
+    const publishSavedMatch = (m: MatchRecord) => {
+      const parseOvers = (overs: string | undefined) => {
+        if (!overs) return { totalOvers: 0, legalBallsInOver: 0 };
+        const parts = overs.split('.');
+        const whole = parseInt(parts[0] || '0', 10) || 0;
+        const frac = parts[1] ? parseInt(parts[1], 10) || 0 : 0;
+        return { totalOvers: whole, legalBallsInOver: frac };
+      };
+  
+      const a = parseOvers(m.oversA);
+      const b = parseOvers(m.oversB);
+  
+      const payload = {
+        status: MatchStatus.RESULT,
+        teamA: m.teamA,
+        teamB: m.teamB,
+        runs: m.scoreA || 0,
+        wickets: m.wicketsA || 0,
+        runsB: m.scoreB || 0,
+        wicketsB: m.wicketsB || 0,
+        totalOvers: a.totalOvers,
+        legalBallsInOver: a.legalBallsInOver,
+        ballHistory: [],
+        currentInnings: 1,
+        innings1Score: m.scoreA || 0
+      } as any;
+  
+      // send to Firestore
+      (async () => {
+        try {
+          const fb = await import('./src/firebaseClient');
+          await fb.setActiveFirebase(payload);
+        } catch (e) {
+          console.warn('Failed to send active to Firestore', e);
+        }
+      })();
     };
 
-    const a = parseOvers(m.oversA);
-    const b = parseOvers(m.oversB);
+    const clearActiveMatch = () => {
 
-    const payload = {
-      status: MatchStatus.RESULT,
-      teamA: m.teamA,
-      teamB: m.teamB,
-      runs: m.scoreA || 0,
-      wickets: m.wicketsA || 0,
-      runsB: m.scoreB || 0,
-      wicketsB: m.wicketsB || 0,
-      totalOvers: a.totalOvers,
-      legalBallsInOver: a.legalBallsInOver,
-      ballHistory: [],
-      currentInnings: 1,
-      innings1Score: m.scoreA || 0
-    } as any;
+      (async () => {
 
-    localStorage.setItem('tpl_active_match', JSON.stringify(payload));
-    try { bcRef.current?.postMessage({ type: 'active', payload }); } catch (e) {}
-    setActiveMatch(payload);
+        try {
 
-    // send to SSE server if available
-    (async () => {
-      try {
-        const mod = await import('./src/liveSync').catch(() => ({}));
-        if (mod && mod.sendActive) await mod.sendActive(payload);
-      } catch (e) {
-        console.warn('Failed to send active to SSE server', e);
-      }
-    })();
+          const fb = await import('./src/firebaseClient');
 
-    // send to Firestore if available
-    (async () => {
-      try {
-        const fb = await import('./src/firebaseClient').catch(() => ({}));
-        if (fb && fb.setActiveFirebase) await fb.setActiveFirebase(payload);
-      } catch (e) {
-        console.warn('Failed to send active to Firestore', e);
-      }
-    })();
-  };
+          await fb.clearActiveFirebase();
 
-  const clearActiveMatch = () => {
-    localStorage.removeItem('tpl_active_match');
-    try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
-    setActiveMatch(null);
+        } catch (e) {
 
-    (async () => {
-      try {
-        const mod = await import('./src/liveSync').catch(() => ({}));
-        if (mod && mod.clearActive) await mod.clearActive();
-      } catch (e) {
-        console.warn('Failed to clear active on SSE server', e);
-      }
-    })();
+          console.warn('Failed to clear active on Firestore', e);
 
-    (async () => {
-      try {
-        const fb = await import('./src/firebaseClient').catch(() => ({}));
-        if (fb && fb.clearActiveFirebase) await fb.clearActiveFirebase();
-      } catch (e) {
-        console.warn('Failed to clear active on Firestore', e);
-      }
-    })();
-  };
+        }
+
+      })();
+
+    };
 
   // Start a fresh tournament: clear history and active match, set a flag
-  const startTournament = () => {
-    if (!confirm('Start a new tournament? This will clear all saved match history and reset points.')) return;
-    const updatedHistory: MatchRecord[] = [];
-    setMatchHistory(updatedHistory);
-    localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
-    localStorage.setItem('tpl_tournament_started', new Date().toISOString());
-    localStorage.removeItem('tpl_active_match');
-    try { bcRef.current?.postMessage({ type: 'matches-updated', payload: updatedHistory }); } catch (e) {}
-    try { bcRef.current?.postMessage({ type: 'clear' }); } catch (e) {}
-    setActiveMatch(null);
-    // navigate to root scorer
-    window.location.hash = '';
-  };
+    const startTournament = () => {
+      if (!confirm('Start a new tournament? This will clear all saved match history and reset points.')) return;
+      const updatedHistory: MatchRecord[] = [];
+      setMatchHistory(updatedHistory);
+      localStorage.setItem('tpl_match_history', JSON.stringify(updatedHistory));
+      localStorage.setItem('tpl_tournament_started', new Date().toISOString());
+      
+      // Clear active match in Firebase
+      (async () => {
+        try {
+          const fb = await import('./src/firebaseClient');
+          await fb.clearActiveFirebase();
+        } catch (e) {
+          console.warn('Failed to clear active on Firestore', e);
+        }
+      })();
+  
+      // navigate to root scorer
+      window.location.hash = '';
+    };
 
   // Load a saved match into scorer setup (prefill teams/overs) and navigate to scorer
   const loadMatchPreset = (m: MatchRecord) => {
